@@ -6,7 +6,13 @@ from ..config import SafetyConfig
 from ..models import SafetyReport, TokenSnapshot
 
 
-def assess(snap: TokenSnapshot, rug: dict | None, cfg: SafetyConfig) -> SafetyReport:
+# RugCheck flags fresh PumpSwap pools as "LP unlocked" until it re-indexes the burn done by
+# pump.fun's migration (older pools then show 100% locked). For a graduation we saw happen
+# live on PumpPortal, these LP findings are reporting lag, not risk.
+LP_LAG_RISKS = {"Large Amount of LP Unlocked", "Low amount of LP Providers"}
+
+
+def assess(snap: TokenSnapshot, rug: dict | None, cfg: SafetyConfig, canonical_graduation: bool = False) -> SafetyReport:
     hard: list[str] = []
     flags: list[str] = []
     score = 100.0
@@ -67,13 +73,17 @@ def assess(snap: TokenSnapshot, rug: dict | None, cfg: SafetyConfig) -> SafetyRe
                 hard.append(f"only {holders} holders")
             # Pump.fun / bonding-curve style tokens often have burned LP reported differently,
             # so a missing LP figure is a soft flag, a low figure is a hard fail.
+            lp_low = rug["lp_locked_pct"] is not None and rug["lp_locked_pct"] < cfg.min_lp_locked_pct
             if rug["lp_locked_pct"] is None:
                 flags.append("LP lock unknown")
                 score -= 10
-            elif rug["lp_locked_pct"] < cfg.min_lp_locked_pct:
+            elif lp_low and canonical_graduation:
+                flags.append("LP burn not yet indexed (canonical pump.fun graduation)")
+            elif lp_low:
                 hard.append(f"only {rug['lp_locked_pct']:.0f}% LP locked")
-            if len(rug["danger_risks"]) > cfg.max_rugcheck_danger_risks:
-                hard.append("RugCheck danger: " + ", ".join(rug["danger_risks"]))
+            dangers = [r for r in rug["danger_risks"] if not (canonical_graduation and r in LP_LAG_RISKS)]
+            if len(dangers) > cfg.max_rugcheck_danger_risks:
+                hard.append("RugCheck danger: " + ", ".join(dangers))
             for w in rug["warn_risks"]:
                 flags.append(f"RugCheck warn: {w}")
                 score -= 5

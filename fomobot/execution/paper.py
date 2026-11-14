@@ -22,11 +22,14 @@ class PaperExecutor(Executor):
     def _cost(self) -> float:
         return (self.cfg.paper_fee_pct + self.cfg.paper_slippage_pct) / 100
 
-    def buy(self, snap: TokenSnapshot, sol_amount: float) -> Fill:
+    def buy(self, snap: TokenSnapshot, sol_amount: float, expected_cost_pct: float | None = None) -> Fill:
         cash = self.cash_sol()
         if sol_amount > cash:
             raise ExecutionError("insufficient paper balance")
-        tokens = sol_amount * (1 - self._cost()) / snap.price_sol
+        cost = self._cost()
+        if expected_cost_pct is not None:  # half of the quoted round trip is the buy side
+            cost = max(cost, self.cfg.paper_fee_pct / 100 + expected_cost_pct / 200)
+        tokens = sol_amount * (1 - cost) / snap.price_sol
         self.store.set_state("paper_cash", cash - sol_amount)
         return Fill(sol_amount=sol_amount, token_amount=tokens, token_raw=None, price_sol=sol_amount / tokens)
 

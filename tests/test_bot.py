@@ -127,7 +127,7 @@ def test_risk_sizing_and_limits(cfg, tmp_path):
 def test_full_paper_cycle_buy_take_profit_trail_close(cfg):
     store = Store(cfg.db_path)
     dex = FakeDex()
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None, feed=None, quotes=None)
     cfg.strategy.rule_buy_threshold = 50
 
     eng.tick()
@@ -155,7 +155,7 @@ def test_stop_loss(cfg):
     store = Store(cfg.db_path)
     dex = FakeDex()
     cfg.strategy.rule_buy_threshold = 50
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None, feed=None, quotes=None)
     eng.tick()
     entry = store.open_positions()[0].entry_price
     dex.pairs = [make_pair(price=entry * 0.7)]
@@ -168,7 +168,7 @@ def test_rugged_token_never_bought(cfg):
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 0
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(),
-                 rug=FakeRug(dict(CLEAN_RUG, freezeAuthority="X")), analyst=None, ml=None)
+                 rug=FakeRug(dict(CLEAN_RUG, freezeAuthority="X")), analyst=None, ml=None, feed=None, quotes=None)
     eng.tick()
     assert store.open_positions() == []
 
@@ -235,7 +235,7 @@ def test_ml_gate_blocks_low_probability(cfg):
 
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 0
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=LowModel())
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=LowModel(), feed=None, quotes=None)
     eng.tick()
     assert store.open_positions() == []
 
@@ -250,9 +250,66 @@ def test_ml_rejects_tokens_outside_training_domain(cfg):
 
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 0
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=HighModel())
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=HighModel(), feed=None, quotes=None)
     eng.tick()  # FakeDex pair is 3h old, far outside the 30-minute training window
     assert store.open_positions() == []
     cfg.ml.max_age_minutes = 1e9
     eng.tick()
     assert len(store.open_positions()) == 1
+
+
+def test_pumpportal_message_parsing():
+    from fomobot.data.pumpportal import parse_message
+
+    m = parse_message('{"signature": "x", "mint": "ABCpump", "txType": "migrate", "pool": "pump-amm"}')
+    assert m and m[0] == "ABCpump"
+    assert parse_message('{"message": "Subscribed"}') is None
+    assert parse_message('{"mint": "X", "txType": "create"}') is None
+    assert parse_message("not json") is None
+
+
+def test_roundtrip_check_blocks_honeypot(cfg):
+    from fomobot.data.jupiter_quotes import RoundTrip
+
+    class Honeypot:
+        def round_trip(self, mint, sol):
+            return RoundTrip(False, None, None, "no sell route on Jupiter (possible honeypot)")
+
+    class Fine:
+        def round_trip(self, mint, sol):
+            return RoundTrip(True, 4.0, 1.0)
+
+    store = Store(cfg.db_path)
+    cfg.strategy.rule_buy_threshold = 50
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None,
+                 ml=None, feed=None, quotes=Honeypot())
+    eng.tick()
+    assert store.open_positions() == []
+    store.db.execute("DELETE FROM decisions"); store.commit()
+    eng.quotes = Fine()
+    eng.tick()
+    assert len(store.open_positions()) == 1
+
+
+def test_feed_mints_enter_watchlist(cfg):
+    class Feed:
+        def drain(self):
+            return [("NEWMINT111", time.time())]
+
+    store = Store(cfg.db_path)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None,
+                 ml=None, feed=Feed(), quotes=None)
+    eng.discover([])
+    assert "NEWMINT111" in store.get_state("watchlist")
+
+
+def test_lp_lag_waived_only_for_canonical_graduation(cfg):
+    snap = pair_to_snapshot(make_pair())
+    fresh = dict(CLEAN_RUG, markets=[{"marketType": "pump_fun_amm", "lp": {"lpLockedPct": 1e-10}}],
+                 risks=[{"name": "Large Amount of LP Unlocked", "level": "danger"}])
+    rug = parse_report(fresh)
+    assert not safety.assess(snap, rug, cfg.safety).passed
+    rep = safety.assess(snap, rug, cfg.safety, canonical_graduation=True)
+    assert rep.passed and any("not yet indexed" in f for f in rep.flags)
+    other = dict(fresh, risks=[{"name": "Freeze Authority still enabled", "level": "danger"}])
+    assert not safety.assess(snap, parse_report(other), cfg.safety, canonical_graduation=True).passed

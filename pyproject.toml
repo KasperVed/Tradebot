@@ -1,0 +1,33 @@
+[project]
+name = "fomobot"
+version = "0.2.0"
+description = "Data-driven Solana memecoin trading bot (FOMO wallet compatible)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=2.8",
+    "httpx2>=2.13",
+    "pydantic>=2.13",
+    "PyYAML>=6.0",
+    "websockets>=13",
+    "scikit-learn~=1.9.1",
+    "pandas>=2.2",
+    "numpy>=2.0",
+    "solders>=0.21",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyarrow>=17"]
+
+[project.scripts]
+fomobot = "fomobot.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fomobot*"]
+
+[tool.setuptools.package-data]
+"fomobot.intelligence" = ["memecoin_model.joblib", "memecoin_model.json"]

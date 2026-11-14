@@ -24,8 +24,9 @@ Botten handler derfor kun helt nye tokens (2-30 minutter gamle), som modellen ra
 
 Hver 30. sekund kører den denne pipeline:
 
-1. **Opdagelse.** Henter nye pools fra GeckoTerminal og nye og trending tokens fra DexScreener (profiler, boosts,
-   søgninger) plus tokens, den allerede holder øje med. Nye tokens prioriteres.
+1. **Opdagelse.** Lytter i realtid efter pump.fun-graduations via PumpPortals gratis websocket. Det er netop
+   modellens domæne. Derudover henter den nye pools fra GeckoTerminal og nye og trending tokens fra DexScreener.
+   Unge tokens bliver på en watchlist og vurderes igen hver tick, indtil de er 30 minutter gamle.
 2. **Sikkerhed (hårde filtre).** Afviser tokens med mint- eller freeze-authority, lav LP-lås, en enkelt wallet over
    10 %, top-10-wallets over 30 %, en creator der stadig ejer over 5 %, insider-netværk over 15 %, transfer-fees,
    for få holders, for lav likviditet eller for få handler. Data kommer fra RugCheck. AMM-pools og lockers tælles
@@ -39,12 +40,14 @@ Hver 30. sekund kører den denne pipeline:
    porteføljen og **lektioner fra tidligere handler**. Claude kan nedlægge veto mod setups med røde flag, som
    modellen ikke kan se, og vælger conviction, størrelse, take-profit og stop-loss. Uden en API-nøgle køber botten
    på modellen alene.
-6. **Risikostyring.** Positionsstørrelse skaleres efter conviction. Der er loft over antal positioner, samlet
+6. **Honeypot-test.** Før hvert køb henter botten et quote for at købe og straks sælge igen via Jupiter. Er der ingen
+   salgsrute, eller vil turen koste over 10 %, købes der ikke. I paper mode bruges den målte pris som slippage.
+7. **Risikostyring.** Positionsstørrelse skaleres efter conviction. Der er loft over antal positioner, samlet
    eksponering og SOL pr. handel, og der holdes en SOL-reserve til fees. En **daglig tabsgrænse** og en **pause efter
    flere tab i træk** stopper nye køb.
-7. **Exits (valideret).** Stop-loss 25 %, salg af 50 % ved +100 %, trailing stop 35 % på resten, aldrig under
+8. **Exits (valideret).** Stop-loss 25 %, salg af 50 % ved +100 %, trailing stop 35 % på resten, aldrig under
    entry efter take-profit, exit hvis likviditeten kollapser, og max 4 timer.
-8. **Læring.** Når en handel lukkes, skriver Claude en kort lektion. Lektionen gemmes og bruges i fremtidige
+9. **Læring.** Når en handel lukkes, skriver Claude en kort lektion. Lektionen gemmes og bruges i fremtidige
    beslutninger.
 
 Alt logges i SQLite (`fomobot.db`): beslutninger med begrundelse, handler, positioner, priser og lektioner.
@@ -52,7 +55,7 @@ Alt logges i SQLite (`fomobot.db`): beslutninger med begrundelse, handler, posit
 ## Kom i gang
 
 ```bash
-pip install -r requirements.txt
+pip install -e .              # installerer kommandoen `fomobot` (eller: pip install -r requirements.txt)
 cp .env.example .env          # indsæt din ANTHROPIC_API_KEY
 python -m fomobot scan        # analysér markedet én gang uden at handle
 python -m fomobot run         # paper trading (simuleret, start-saldo 5 SOL)
@@ -109,3 +112,12 @@ tests/           pytest-suite med falske markedsdata
 ```
 
 Kør tests med `python -m pytest`.
+
+## Kilder og inspiration
+
+- [ian05012/solana-memecoin-dataset](https://github.com/ian05012/solana-memecoin-dataset): træningsdata for ML-modellen.
+- [vineetdev02/Memcoin-Sniper-Bot](https://github.com/vineetdev02/Memcoin-Sniper-Bot): idéen om at teste salget før
+  købet (honeypot-test).
+- [chainstacklabs/pumpfun-bonkfun-bot](https://github.com/chainstacklabs/pumpfun-bonkfun-bot): top-10-holder-tjekket
+  (maks. 30 %) og at gå ind ved migration til PumpSwap.
+- PumpPortal (graduations), DexScreener, GeckoTerminal, RugCheck og Jupiter: gratis API'er.

@@ -43,6 +43,15 @@ antal holders.
 - Kun tokens på 2-30 minutter, altså modellens træningsdomæne. Ældre tokens afvises, fordi modellen dér kun gætter.
 - Standard-exits: SL 25 %, sælg 50 % ved +100 %, trailing stop 35 %, max 4 timer.
 
+## Undersøgt, men ikke brugt (endnu)
+
+- [git-disl/MELT](https://github.com/git-disl/MELT) (tidligere MemeTrans) har 41.470 pump.fun-tokens fra
+  dec. 2024 til mar. 2025 med 122 risiko-features fra bonding-kurven. Data ligger på Google Drive, licensen er
+  CC BY-NC, og features kræver, at hver transaktion på bonding-kurven parses live. Det er et godt næste skridt til at
+  teste modellen i et andet markedsregime.
+- [Smurfetc/solana-memecoin-calls-dataset](https://github.com/Smurfetc/solana-memecoin-calls-dataset) har 7.235
+  calls med entry-market cap og senere peak, men ingen candles, så exits kan ikke simuleres.
+
 ## Forbehold
 
 - **Ét markedsregime.** Datasættet dækker 20 dage i juni 2026, og markedet kan have ændret sig.

@@ -114,7 +114,7 @@ class JupiterExecutor(Executor):
             time.sleep(2)
         raise ExecutionError(f"transaction {sig} not confirmed in time (check explorer before retrying)")
 
-    def buy(self, snap: TokenSnapshot, sol_amount: float) -> Fill:
+    def buy(self, snap: TokenSnapshot, sol_amount: float, expected_cost_pct: float | None = None) -> Fill:
         before = self.token_balance_raw(snap.mint)
         quote, sig = self._swap(WSOL_MINT, snap.mint, int(sol_amount * LAMPORTS))
         received = self.token_balance_raw(snap.mint) - before or int(quote["outAmount"])

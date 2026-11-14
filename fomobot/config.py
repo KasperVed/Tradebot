@@ -13,6 +13,7 @@ class DiscoveryConfig(BaseModel):
     use_latest_profiles: bool = True
     use_boosted: bool = True
     use_top_boosts: bool = True
+    use_pumpportal: bool = True  # real-time pump.fun graduations over a free websocket
     use_geckoterminal: bool = True  # trending + new pools (strict free rate limit)
     geckoterminal_every_ticks: int = 2  # new pools are where the validated edge is
     search_queries: list[str] = Field(default_factory=lambda: ["pumpswap", "raydium"])
@@ -117,6 +118,8 @@ class ExecutionConfig(BaseModel):
     paper_fee_pct: float = 1.0  # platform/swap fee assumption
     paper_slippage_pct: float = 1.5
     slippage_bps: int = 300
+    roundtrip_check: bool = True  # quote buy + sell on Jupiter before every entry (honeypot test)
+    max_roundtrip_loss_pct: float = 10.0
     jupiter_base_url: str = "https://lite-api.jup.ag/swap/v1"
     priority_fee_lamports: int | str = "auto"
     confirm_timeout_s: float = 60

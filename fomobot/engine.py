@@ -31,6 +31,8 @@ class Engine:
         analyst: Analyst | None = None,
         trade: bool = True,
         ml="auto",
+        feed="auto",
+        quotes="auto",
     ):
         self.cfg, self.store, self.ex = cfg, store, executor
         self.dex = dex or DexScreener()
@@ -41,6 +43,17 @@ class Engine:
 
             self.gecko = GeckoTerminal()
         self._ticks = 0
+        if feed == "auto":
+            from .data.pumpportal import MigrationFeed
+
+            feed = MigrationFeed().start() if cfg.discovery.use_pumpportal else None
+        self.feed = feed
+        if quotes == "auto":
+            from .data.jupiter_quotes import JupiterQuotes
+
+            quotes = JupiterQuotes(cfg.execution.jupiter_base_url, slippage_bps=cfg.execution.slippage_bps) \
+                if cfg.execution.roundtrip_check else None
+        self.quotes = quotes
         self.analyst = analyst
         if ml == "auto":
             from .intelligence.ml import TradeModel
@@ -56,6 +69,13 @@ class Engine:
         d = self.cfg.discovery
         mints: list[str] = [p.mint for p in positions]
         watch = {m: t for m, t in (self.store.get_state("watchlist", {}) or {}).items() if time.time() - t < WATCH_SECONDS}
+        if self.feed:
+            grads = self.store.get_state("graduated", {}) or {}
+            for mint, ts in self.feed.drain():
+                watch.setdefault(mint, ts)  # fresh graduation: exactly the model's domain
+                grads[mint] = ts
+            cutoff = time.time() - 24 * 3600
+            self.store.set_state("graduated", {m: t for m, t in grads.items() if t > cutoff})
         mints += list(watch)
         if d.use_latest_profiles:
             mints += self.dex.latest_profile_mints()
@@ -149,6 +169,7 @@ class Engine:
         signals: list[Signal] = []
         funnel = {"seen": 0, "market_filter": 0, "rugcheck": 0, "entry_gate": 0, "ml_model": 0, "candidates": 0}
         watch = self.store.get_state("watchlist", {}) or {}
+        graduated = self.store.get_state("graduated", {}) or {}
         in_domain = lambda s: 0 if (s.pair_created_ms and s.age_minutes <= self.cfg.ml.max_age_minutes) else 1
         cands = sorted((s for m, s in snaps.items() if m not in skip), key=lambda s: (in_domain(s), -s.volume_h1))
         for snap in cands[: self.cfg.discovery.max_candidates]:
@@ -165,7 +186,8 @@ class Engine:
             if self.cfg.safety.use_rugcheck:
                 raw = self.rug.report(snap.mint)
                 rug = parse_report(raw) if raw else None
-            rep = safety.assess(snap, rug, self.cfg.safety)
+            canonical = snap.mint in graduated and snap.dex_id == "pumpswap"
+            rep = safety.assess(snap, rug, self.cfg.safety, canonical_graduation=canonical)
             if not rep.passed:
                 funnel["rugcheck"] += 1
                 log.debug("reject %s: %s", snap.symbol, rep.hard_fail_reasons)
@@ -232,8 +254,16 @@ class Engine:
             if not check.allowed:
                 log.info("  not entering %s: %s", snap.symbol, check.reason)
                 continue
+            rt_loss = None
+            if self.quotes:
+                rt = self.quotes.round_trip(snap.mint, check.size_sol)
+                if not rt.ok or rt.loss_pct > self.cfg.execution.max_roundtrip_loss_pct:
+                    why = rt.reason or f"round trip would lose {rt.loss_pct:.1f}%"
+                    log.info("  not entering %s: %s", snap.symbol, why)
+                    continue
+                rt_loss = rt.loss_pct
             try:
-                fill = self.ex.buy(snap, check.size_sol)
+                fill = self.ex.buy(snap, check.size_sol, expected_cost_pct=rt_loss)
             except ExecutionError as e:
                 log.error("BUY %s failed: %s", snap.symbol, e)
                 continue
