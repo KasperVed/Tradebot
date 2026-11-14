@@ -1,0 +1,6 @@
+anthropic>=2.8
+httpx2>=2.13
+pydantic>=2.13
+PyYAML>=6.0
+solders>=0.21
+pytest>=8
