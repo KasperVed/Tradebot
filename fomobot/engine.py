@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
-from .analysis import indicators, safety, scorer
+from .analysis import gate, indicators, safety, scorer
 from .config import Config
 from .data.dexscreener import DexScreener, best_snapshots
 from .data.rugcheck import RugCheck, parse_report
@@ -27,12 +27,19 @@ class Engine:
         executor: Executor,
         dex: DexScreener | None = None,
         rug: RugCheck | None = None,
+        gecko=None,
         analyst: Analyst | None = None,
         trade: bool = True,
     ):
         self.cfg, self.store, self.ex = cfg, store, executor
         self.dex = dex or DexScreener()
         self.rug = rug or RugCheck()
+        self.gecko = gecko
+        if self.gecko is None and cfg.discovery.use_geckoterminal:
+            from .data.geckoterminal import GeckoTerminal
+
+            self.gecko = GeckoTerminal()
+        self._ticks = 0
         self.analyst = analyst
         self.risk = RiskManager(cfg.risk, cfg.strategy, store)
         self.trade = trade  # False = analyse only ("scan")
@@ -47,6 +54,12 @@ class Engine:
             mints += self.dex.latest_profile_mints()
         if d.use_boosted:
             mints += self.dex.boosted_mints()
+        if d.use_top_boosts:
+            mints += self.dex.top_boosted_mints()
+        if self.gecko and self._ticks % max(1, d.geckoterminal_every_ticks) == 0:
+            for kind in ("trending_pools", "new_pools"):
+                mints += [p["mint"] for p in self.gecko.pools(kind, 1)]
+        self._ticks += 1
         snaps = self.dex.snapshots(mints)
         for q in d.search_queries:
             for mint, s in best_snapshots(self.dex.search_pairs(q)).items():
@@ -126,11 +139,14 @@ class Engine:
     def analyse(self, snaps: dict[str, TokenSnapshot], skip: set[str]) -> list[Signal]:
         pre_cfg = self.cfg.safety.model_copy(update={"use_rugcheck": False})
         signals: list[Signal] = []
+        funnel = {"seen": 0, "market_filter": 0, "rugcheck": 0, "entry_gate": 0, "candidates": 0}
         watch = self.store.get_state("watchlist", {}) or {}
         cands = sorted((s for m, s in snaps.items() if m not in skip), key=lambda s: -s.volume_h1)
         for snap in cands[: self.cfg.discovery.max_candidates]:
+            funnel["seen"] += 1
             pre = safety.assess(snap, None, pre_cfg)
             if not pre.passed:
+                funnel["market_filter"] += 1
                 continue
             rug = None
             if self.cfg.safety.use_rugcheck:
@@ -138,12 +154,22 @@ class Engine:
                 rug = parse_report(raw) if raw else None
             rep = safety.assess(snap, rug, self.cfg.safety)
             if not rep.passed:
+                funnel["rugcheck"] += 1
                 log.debug("reject %s: %s", snap.symbol, rep.hard_fail_reasons)
                 continue
             watch.setdefault(snap.mint, time.time())
-            ind = indicators.compute(snap, self.store.price_history(snap.mint))
+            history = self.store.price_history(snap.mint)
+            ok, gate_fails = gate.check(snap, history, self.cfg.strategy.entry_gate)
+            if not ok:
+                funnel["entry_gate"] += 1
+                log.debug("gate %s: %s", snap.symbol, gate_fails)
+                continue
+            ind = indicators.compute(snap, history)
             signals.append(scorer.score(snap, rep, ind))
         self.store.set_state("watchlist", watch)
+        funnel["candidates"] = len(signals)
+        log.info("funnel: %s seen -> rejected market %s, rugcheck %s, entry gate %s -> %s candidates",
+                 *funnel.values())
         return sorted(signals, key=lambda s: -s.score)
 
     def decide_and_enter(self, signals: list[Signal], positions: list[Position], snaps) -> None:
@@ -218,7 +244,7 @@ class Engine:
             log.warning("Entries paused: %s", paused)
             return
         signals = self.analyse(snaps, skip={p.mint for p in positions})
-        log.info("tick: %d tokens seen, %d passed safety, equity %.4f SOL (%d open)",
+        log.info("tick: %d tokens seen, %d candidates, equity %.4f SOL (%d open)",
                  len(snaps), len(signals), pf["equity_sol"], len(positions))
         self.decide_and_enter(signals, positions, snaps)
 

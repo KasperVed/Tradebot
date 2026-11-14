@@ -52,6 +52,9 @@ class FakeDex:
     def boosted_mints(self):
         return []
 
+    def top_boosted_mints(self):
+        return []
+
     def search_pairs(self, q):
         return []
 
@@ -72,6 +75,7 @@ def cfg(tmp_path):
     c = Config()
     c.db_path = str(tmp_path / "t.db")
     c.discovery.search_queries = []
+    c.discovery.use_geckoterminal = False
     c.llm.enabled = False
     return c
 

@@ -12,7 +12,10 @@ from pydantic import BaseModel, Field
 class DiscoveryConfig(BaseModel):
     use_latest_profiles: bool = True
     use_boosted: bool = True
-    search_queries: list[str] = Field(default_factory=lambda: ["pump", "sol"])
+    use_top_boosts: bool = True
+    use_geckoterminal: bool = True  # trending + new pools (strict free rate limit)
+    geckoterminal_every_ticks: int = 4
+    search_queries: list[str] = Field(default_factory=lambda: ["pumpswap", "raydium"])
     max_candidates: int = 60
 
 
@@ -24,12 +27,31 @@ class SafetyConfig(BaseModel):
     min_age_minutes: float = 10
     max_age_hours: float = 72
     min_txns_h1: int = 100
-    max_top_holder_pct: float = 25.0
+    max_top_holder_pct: float = 10.0  # largest non-pool wallet
+    max_top10_pct: float = 30.0  # top-10 non-pool wallets combined
+    max_creator_pct: float = 5.0
+    max_insider_pct: float = 15.0  # supply held by RugCheck-detected insider networks
+    max_transfer_fee_pct: float = 0.0  # Token-2022 transfer fees eat every trade
+    min_holders: int = 150
     min_lp_locked_pct: float = 80.0
     reject_mint_authority: bool = True
     reject_freeze_authority: bool = True
     use_rugcheck: bool = True
     max_rugcheck_danger_risks: int = 0
+
+
+class EntryGateConfig(BaseModel):
+    """Entry conditions validated by `python -m fomobot backtest` (same names as EntryParams)."""
+
+    enabled: bool = True
+    min_ret5: float = 0.03
+    max_ret5: float = 0.25
+    min_ret60: float = 0.0
+    max_ret60: float = 1.5
+    min_vol_accel: float = 2.0
+    min_green: float = 0.6  # live: share of buys in the last 5 min
+    min_age_min: float = 10
+    max_dd60: float = 0.35
 
 
 class StrategyConfig(BaseModel):
@@ -43,6 +65,8 @@ class StrategyConfig(BaseModel):
     max_hold_minutes: float = 240
     exit_on_liquidity_drop_pct: float = 50
     reentry_cooldown_minutes: float = 120
+    breakeven_after_tp: bool = True
+    entry_gate: EntryGateConfig = Field(default_factory=EntryGateConfig)
 
 
 class RiskConfig(BaseModel):
@@ -65,6 +89,7 @@ class LLMConfig(BaseModel):
     max_calls_per_hour: int = 30
     reflect_on_closed_trades: bool = True
     lessons_in_prompt: int = 12
+    backtest_result_path: str = "data/history/backtest_result.json"
 
 
 class ExecutionConfig(BaseModel):

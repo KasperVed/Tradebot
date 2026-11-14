@@ -110,6 +110,10 @@ class DexScreener:
         data = self._get("/token-boosts/latest/v1") or []
         return [d["tokenAddress"] for d in data if d.get("chainId") == "solana" and d.get("tokenAddress")]
 
+    def top_boosted_mints(self) -> list[str]:
+        data = self._get("/token-boosts/top/v1") or []
+        return [d["tokenAddress"] for d in data if d.get("chainId") == "solana" and d.get("tokenAddress")]
+
     def search_pairs(self, query: str) -> list[dict]:
         data = self._get(f"/latest/dex/search?q={query}") or {}
         return data.get("pairs") or []

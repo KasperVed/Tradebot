@@ -106,7 +106,7 @@ class RiskManager:
             drawdown = (1 - price / pos.peak_price) * 100
             if drawdown >= self.strat.trailing_stop_pct:
                 return ExitOrder(1.0, f"trailing stop ({drawdown:.1f}% off peak)")
-            if change < 0:  # never let a winner turn into a loser after taking profit
+            if self.strat.breakeven_after_tp and change < 0:  # winner must not turn into a loser
                 return ExitOrder(1.0, "gave back profit below entry")
 
         if now - pos.opened_at > self.strat.max_hold_minutes * 60:

@@ -36,6 +36,9 @@ How to think:
 - conviction is your probability-weighted confidence (0-100) that the trade has positive
   expected value. size_multiplier (0.25-1.5) scales position size; use < 1 when unsure.
 - Use the lessons from past trades. They are the bot's own experience.
+- If historical base rates are given, they are out-of-sample backtest results for setups
+  that pass the same entry gate. Calibrate conviction against them: a typical setup
+  should get a conviction close to what the base rate justifies, not higher.
 
 Be concise and concrete in the thesis: name the specific numbers that drive the call."""
 
@@ -93,6 +96,7 @@ class Analyst:
         self.cfg = cfg
         self.client = client or anthropic.Anthropic()
         self._calls: list[float] = []
+        self.base_rates = load_base_rates(cfg.backtest_result_path)
 
     def _budget_ok(self) -> bool:
         now = time.time()
@@ -129,6 +133,8 @@ class Analyst:
             + "\n\nPortfolio:\n" + json.dumps(portfolio, indent=1)
             + "\n\nLessons from past trades (newest first):\n"
             + ("\n".join(f"- {l}" for l in lessons) if lessons else "- none yet")
+            + ("\n\nHistorical base rates (out-of-sample backtest):\n" + json.dumps(self.base_rates, indent=1)
+               if self.base_rates else "")
             + "\n\nDecide: BUY or SKIP."
         )
         try:
@@ -161,6 +167,25 @@ class Analyst:
             log.warning("Reflection failed: %s", e)
             return None
         return out.lesson.strip() if out else None
+
+
+def load_base_rates(path: str) -> dict | None:
+    try:
+        with open(path) as f:
+            res = json.load(f)
+    except (OSError, ValueError):
+        return None
+    test = (res.get("results") or {}).get("test") or {}
+    rnd = (res.get("results") or {}).get("test_random_entry") or {}
+    if not test.get("n"):
+        return None
+    keep = ("n", "tokens", "win_rate", "mean", "median", "profit_factor", "avg_win", "avg_loss", "avg_hold")
+    return {
+        "gate_signal_trades": {k: round(test[k], 4) if isinstance(test[k], float) else test[k] for k in keep if k in test},
+        "random_entry_same_exits": {k: round(rnd[k], 4) for k in ("mean", "win_rate") if k in rnd},
+        "exit_rules": res.get("exit"),
+        "note": "returns are per trade on stake, after ~2.5% round-trip fees and slippage",
+    }
 
 
 def rule_decision(sig: Signal, threshold: float, tp: float, sl: float) -> Decision:

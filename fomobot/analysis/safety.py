@@ -51,6 +51,20 @@ def assess(snap: TokenSnapshot, rug: dict | None, cfg: SafetyConfig) -> SafetyRe
                 hard.append("freeze authority not revoked")
             if rug["top_holder_pct"] is not None and rug["top_holder_pct"] > cfg.max_top_holder_pct:
                 hard.append(f"top holder owns {rug['top_holder_pct']:.1f}%")
+            if rug.get("top10_pct") is not None and rug["top10_pct"] > cfg.max_top10_pct:
+                hard.append(f"top 10 wallets own {rug['top10_pct']:.1f}%")
+            if rug.get("creator_pct") is not None and rug["creator_pct"] > cfg.max_creator_pct:
+                hard.append(f"creator still holds {rug['creator_pct']:.1f}%")
+            if rug.get("insider_pct") is not None and rug["insider_pct"] > cfg.max_insider_pct:
+                hard.append(f"insider networks hold {rug['insider_pct']:.1f}%")
+            elif rug.get("insiders_detected", 0) >= 20:
+                flags.append(f"{rug['insiders_detected']} insider wallets detected")
+                score -= 10
+            if rug.get("transfer_fee_pct", 0) > cfg.max_transfer_fee_pct:
+                hard.append(f"transfer fee {rug['transfer_fee_pct']}%")
+            holders = rug.get("total_holders")
+            if holders is not None and holders < cfg.min_holders:
+                hard.append(f"only {holders} holders")
             # Pump.fun / bonding-curve style tokens often have burned LP reported differently,
             # so a missing LP figure is a soft flag, a low figure is a hard fail.
             if rug["lp_locked_pct"] is None:
