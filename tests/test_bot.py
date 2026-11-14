@@ -313,3 +313,42 @@ def test_lp_lag_waived_only_for_canonical_graduation(cfg):
     assert rep.passed and any("not yet indexed" in f for f in rep.flags)
     other = dict(fresh, risks=[{"name": "Freeze Authority still enabled", "level": "danger"}])
     assert not safety.assess(snap, parse_report(other), cfg.safety, canonical_graduation=True).passed
+
+
+def test_live_executor_closes_only_empty_token_accounts(monkeypatch):
+    import base64 as b64
+
+    from solders.keypair import Keypair
+    from solders.transaction import VersionedTransaction
+
+    from fomobot.execution.jupiter import JupiterExecutor
+
+    kp = Keypair()
+    sent = []
+    empty, full = str(Keypair().pubkey()), str(Keypair().pubkey())
+    token_prog = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+
+    def acc(pubkey, amount):
+        return {"pubkey": pubkey, "account": {"owner": token_prog, "data": {"parsed": {"info": {
+            "tokenAmount": {"amount": str(amount)}}}}}}
+
+    def handler(request: httpx.Request):
+        body = json.loads(request.content)
+        m = body["method"]
+        result = {
+            "getTokenAccountsByOwner": {"value": [acc(empty, 0), acc(full, 5)]},
+            "getLatestBlockhash": {"value": {"blockhash": "11111111111111111111111111111111"}},
+            "getSignatureStatuses": {"value": [{"confirmationStatus": "confirmed", "err": None}]},
+        }.get(m)
+        if m == "sendTransaction":
+            sent.append(VersionedTransaction.from_bytes(b64.b64decode(body["params"][0])))
+            result = "SIG"
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
+
+    monkeypatch.setenv("WALLET_PRIVATE_KEY", str(kp))
+    ex = JupiterExecutor(Config(), http=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert ex.close_empty_accounts(MINT) == 1
+    ix = sent[0].message.instructions[0]
+    keys = sent[0].message.account_keys
+    assert bytes(ix.data) == bytes([9])
+    assert str(keys[ix.accounts[0]]) == empty  # only the empty account is closed

@@ -29,7 +29,8 @@ class PaperExecutor(Executor):
         cost = self._cost()
         if expected_cost_pct is not None:  # half of the quoted round trip is the buy side
             cost = max(cost, self.cfg.paper_fee_pct / 100 + expected_cost_pct / 200)
-        tokens = sol_amount * (1 - cost) / snap.price_sol
+        fixed = min(self.cfg.paper_fixed_cost_sol, sol_amount * 0.5)
+        tokens = (sol_amount - fixed) * (1 - cost) / snap.price_sol
         self.store.set_state("paper_cash", cash - sol_amount)
         return Fill(sol_amount=sol_amount, token_amount=tokens, token_raw=None, price_sol=sol_amount / tokens)
 

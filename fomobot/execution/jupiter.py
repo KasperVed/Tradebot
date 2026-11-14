@@ -62,6 +62,38 @@ class JupiterExecutor(Executor):
             total += int(acc["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"])
         return total
 
+    def close_empty_accounts(self, mint: str) -> int:
+        """Close this wallet's empty token accounts for `mint` to reclaim their rent
+        (~0.002 SOL each). Best effort: a failure only means the rent stays locked."""
+        from solders.hash import Hash
+        from solders.instruction import AccountMeta, Instruction
+        from solders.message import MessageV0
+        from solders.pubkey import Pubkey
+        from solders.transaction import VersionedTransaction
+
+        res = self._rpc("getTokenAccountsByOwner",
+                        [self.pubkey, {"mint": mint}, {"encoding": "jsonParsed", "commitment": "confirmed"}])
+        owner = self.kp.pubkey()
+        ixs = []
+        for acc in res.get("value", []):
+            if int(acc["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"]) != 0:
+                continue
+            program = Pubkey.from_string(acc["account"]["owner"])  # SPL Token or Token-2022
+            ixs.append(Instruction(program, bytes([9]), [  # 9 = CloseAccount
+                AccountMeta(Pubkey.from_string(acc["pubkey"]), False, True),
+                AccountMeta(owner, False, True),  # rent goes back to us
+                AccountMeta(owner, True, False),
+            ]))
+        if not ixs:
+            return 0
+        blockhash = self._rpc("getLatestBlockhash", [{"commitment": "confirmed"}])["value"]["blockhash"]
+        msg = MessageV0.try_compile(owner, ixs, [], Hash.from_string(blockhash))
+        tx = VersionedTransaction(msg, [self.kp])
+        sig = self._rpc("sendTransaction", [base64.b64encode(bytes(tx)).decode(), {"encoding": "base64"}])
+        self._confirm(sig)
+        log.info("closed %d empty token account(s) for %s, rent reclaimed (%s)", len(ixs), mint[:8], sig)
+        return len(ixs)
+
     # --- swap ---------------------------------------------------------------
     def _swap(self, input_mint: str, output_mint: str, amount_raw: int) -> tuple[dict, str]:
         from solders.transaction import VersionedTransaction
@@ -129,6 +161,11 @@ class JupiterExecutor(Executor):
         amount = held if fraction >= 0.999 else int(held * fraction)
         quote, sig = self._swap(pos.mint, WSOL_MINT, amount)
         sol_out = int(quote["outAmount"]) / LAMPORTS
+        if amount == held:
+            try:
+                self.close_empty_accounts(pos.mint)
+            except Exception as e:  # never let cleanup break a completed sale
+                log.warning("could not close token account for %s: %s", pos.symbol, e)
         ui = amount / 10 ** self.decimals(pos.mint)
         log.info("SELL %s: %s tokens -> ~%.4f SOL (%s)", pos.symbol, ui, sol_out, sig)
         return Fill(sol_amount=sol_out, token_amount=ui, token_raw=amount, price_sol=sol_out / ui if ui else 0, signature=sig)

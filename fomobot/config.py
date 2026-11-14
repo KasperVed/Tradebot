@@ -117,6 +117,9 @@ class ExecutionConfig(BaseModel):
     paper_starting_sol: float = 5.0
     paper_fee_pct: float = 1.0  # platform/swap fee assumption
     paper_slippage_pct: float = 1.5
+    # Fixed SOL cost per buy that percentages miss: token-account rent (~0.002 SOL, only refunded
+    # if the account is closed) plus network/priority fees. Matters a lot on small accounts.
+    paper_fixed_cost_sol: float = 0.003
     slippage_bps: int = 300
     roundtrip_check: bool = True  # quote buy + sell on Jupiter before every entry (honeypot test)
     max_roundtrip_loss_pct: float = 10.0

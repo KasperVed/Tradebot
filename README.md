@@ -79,6 +79,22 @@ trending-tokens ikke har nogen edge (se research).
 Hvad backtesten ikke kan se: holder-data, RugCheck og købs-/salgsantal bagud i tid. De filtre fjerner kun handler,
 så de valideres i paper mode.
 
+## Lille konto (fx 1000 kr fra Coinbase)
+
+`config.yaml` er sat op til ca. 2 SOL: maks. 0,1 SOL pr. handel, maks. 3 positioner, maks. 25 % af kontoen i spil
+og 0,1 SOL i reserve til gebyrer. Nye køb stopper efter en dag med 10 % tab eller efter 3 tab i træk (2 timers pause).
+Paper mode regner med 0,003 SOL i faste gebyrer pr. køb. Live lukker botten token-kontoen efter hvert fuldt salg og
+får dens rent (~0,002 SOL) tilbage.
+
+Sådan kommer pengene fra Coinbase til botten (det gør kontoens ejer selv):
+
+1. Kør paper mode i 3-7 dage og tjek `fomobot report`. Hvis resultatet ligger langt under researchen, så stop her.
+2. Opret en **ny** Solana-wallet, der kun bruges til botten (fx i Phantom). Brug aldrig en wallet med andre penge i.
+3. Køb SOL på Coinbase og send dem til den nye wallets adresse. Start med en lille del, fx 0,5 SOL.
+4. Eksportér den nye wallets private key og læg den i `.env` som `WALLET_PRIVATE_KEY`. Sæt `SOLANA_RPC_URL` til en
+   rigtig RPC (fx en gratis Helius-nøgle).
+5. Sæt `execution.mode: live` i `config.yaml` og start med `fomobot run --live`.
+
 ## Gå live (rigtige penge)
 
 1. Lad botten køre i paper mode i mindst et par dage, og tjek `report`.
