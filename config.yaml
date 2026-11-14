@@ -1,23 +1,32 @@
 # FOMO bot strategy config. Secrets go in .env, never here.
 # execution.mode: paper (simulated) or live (real funds, also needs --live).
+# Defaults are backed by research/ (31k real memecoins) and the candle backtest; see README.
 tick_seconds: 30
 db_path: fomobot.db
 discovery:
   use_latest_profiles: true
   use_boosted: true
+  use_top_boosts: true
+  use_geckoterminal: true
+  geckoterminal_every_ticks: 2
   search_queries:
-  - pump
-  - sol
-  max_candidates: 60
+  - pumpswap
+  - raydium
+  max_candidates: 80
 safety:
-  min_liquidity_usd: 15000
+  min_liquidity_usd: 10000
   max_liquidity_usd: 5000000
-  min_market_cap_usd: 30000
+  min_market_cap_usd: 15000
   max_market_cap_usd: 20000000
-  min_age_minutes: 10
+  min_age_minutes: 2
   max_age_hours: 72
-  min_txns_h1: 100
-  max_top_holder_pct: 25.0
+  min_txns_h1: 50
+  max_top_holder_pct: 10.0
+  max_top10_pct: 30.0
+  max_creator_pct: 5.0
+  max_insider_pct: 15.0
+  max_transfer_fee_pct: 0.0
+  min_holders: 50
   min_lp_locked_pct: 80.0
   reject_mint_authority: true
   reject_freeze_authority: true
@@ -27,13 +36,24 @@ strategy:
   rule_buy_threshold: 70
   llm_min_score: 60
   llm_min_conviction: 65
-  default_take_profit_pct: 60
-  default_stop_loss_pct: 20
+  default_take_profit_pct: 100
+  default_stop_loss_pct: 25
   tp_sell_fraction: 0.5
-  trailing_stop_pct: 25
+  trailing_stop_pct: 35
   max_hold_minutes: 240
   exit_on_liquidity_drop_pct: 50
   reentry_cooldown_minutes: 120
+  breakeven_after_tp: true
+  entry_gate:
+    enabled: false
+    min_ret5: -0.05
+    max_ret5: 0.3
+    min_ret60: -0.25
+    max_ret60: 3.0
+    min_vol_accel: 0.5
+    min_green: 0.45
+    min_age_min: 2
+    max_dd60: 0.4
 risk:
   base_position_pct: 5.0
   max_position_sol: 0.5
@@ -44,6 +64,12 @@ risk:
   consecutive_loss_pause: 3
   pause_minutes: 60
   sol_reserve: 0.05
+ml:
+  enabled: true
+  min_percentile: 0.9
+  max_age_minutes: 30
+  reject_out_of_domain: true
+  model_path: null
 llm:
   enabled: true
   model: claude-opus-5-5
@@ -52,6 +78,7 @@ llm:
   max_calls_per_hour: 30
   reflect_on_closed_trades: true
   lessons_in_prompt: 12
+  backtest_result_path: null
 execution:
   mode: paper
   paper_starting_sol: 5.0

@@ -30,6 +30,7 @@ class Engine:
         gecko=None,
         analyst: Analyst | None = None,
         trade: bool = True,
+        ml="auto",
     ):
         self.cfg, self.store, self.ex = cfg, store, executor
         self.dex = dex or DexScreener()
@@ -41,6 +42,12 @@ class Engine:
             self.gecko = GeckoTerminal()
         self._ticks = 0
         self.analyst = analyst
+        if ml == "auto":
+            from .intelligence.ml import TradeModel
+
+            ml = TradeModel.load(cfg.ml.model_path) if cfg.ml.enabled else None
+        self.ml = ml
+        self.ml_threshold = self.ml.threshold(cfg.ml.min_percentile) if self.ml else None
         self.risk = RiskManager(cfg.risk, cfg.strategy, store)
         self.trade = trade  # False = analyse only ("scan")
 
@@ -57,8 +64,9 @@ class Engine:
         if d.use_top_boosts:
             mints += self.dex.top_boosted_mints()
         if self.gecko and self._ticks % max(1, d.geckoterminal_every_ticks) == 0:
-            for kind in ("trending_pools", "new_pools"):
-                mints += [p["mint"] for p in self.gecko.pools(kind, 1)]
+            kinds = ["new_pools"] + (["trending_pools"] if self._ticks % (4 * max(1, d.geckoterminal_every_ticks)) == 0 else [])
+            for kind in kinds:
+                mints += [p["mint"] for p in self.gecko.pools(kind, 2 if kind == "new_pools" else 1)]
         self._ticks += 1
         snaps = self.dex.snapshots(mints)
         for q in d.search_queries:
@@ -139,9 +147,10 @@ class Engine:
     def analyse(self, snaps: dict[str, TokenSnapshot], skip: set[str]) -> list[Signal]:
         pre_cfg = self.cfg.safety.model_copy(update={"use_rugcheck": False})
         signals: list[Signal] = []
-        funnel = {"seen": 0, "market_filter": 0, "rugcheck": 0, "entry_gate": 0, "candidates": 0}
+        funnel = {"seen": 0, "market_filter": 0, "rugcheck": 0, "entry_gate": 0, "ml_model": 0, "candidates": 0}
         watch = self.store.get_state("watchlist", {}) or {}
-        cands = sorted((s for m, s in snaps.items() if m not in skip), key=lambda s: -s.volume_h1)
+        in_domain = lambda s: 0 if (s.pair_created_ms and s.age_minutes <= self.cfg.ml.max_age_minutes) else 1
+        cands = sorted((s for m, s in snaps.items() if m not in skip), key=lambda s: (in_domain(s), -s.volume_h1))
         for snap in cands[: self.cfg.discovery.max_candidates]:
             funnel["seen"] += 1
             pre = safety.assess(snap, None, pre_cfg)
@@ -164,21 +173,35 @@ class Engine:
                 funnel["entry_gate"] += 1
                 log.debug("gate %s: %s", snap.symbol, gate_fails)
                 continue
+            prob = None
+            if self.ml and snap.age_minutes > self.cfg.ml.max_age_minutes:
+                if self.cfg.ml.reject_out_of_domain:
+                    funnel["ml_model"] += 1
+                    continue
+            elif self.ml:
+                prob = self.ml.predict(snap, rug)
+                if prob < self.ml_threshold:
+                    funnel["ml_model"] += 1
+                    log.debug("ml %s: p=%.2f < %.2f", snap.symbol, prob, self.ml_threshold)
+                    continue
             ind = indicators.compute(snap, history)
-            signals.append(scorer.score(snap, rep, ind))
+            sig = scorer.score(snap, rep, ind)
+            sig.ml_prob, sig.ml_threshold = prob, self.ml_threshold
+            signals.append(sig)
         self.store.set_state("watchlist", watch)
         funnel["candidates"] = len(signals)
-        log.info("funnel: %s seen -> rejected market %s, rugcheck %s, entry gate %s -> %s candidates",
+        log.info("funnel: %s seen -> rejected market %s, rugcheck %s, entry gate %s, ml model %s -> %s candidates",
                  *funnel.values())
-        return sorted(signals, key=lambda s: -s.score)
+        # The ML probability is the validated ranking; the rule score is a tie-breaker.
+        return sorted(signals, key=lambda s: (-(s.ml_prob or 0), -s.score))
 
     def decide_and_enter(self, signals: list[Signal], positions: list[Position], snaps) -> None:
         st = self.cfg.strategy
         for sig in signals:
             snap = sig.snapshot
-            gate = st.llm_min_score if self.analyst else st.rule_buy_threshold
-            if sig.score < gate:
-                break  # sorted by score
+            min_score = st.llm_min_score if self.analyst else st.rule_buy_threshold
+            if sig.ml_prob is None and sig.score < min_score:
+                continue  # without the ML model, fall back to the rule-score threshold
             if self.store.recent_decision(snap.mint, self.cfg.llm.decision_cache_minutes * 60):
                 continue
             pf = self.portfolio(positions, snaps)

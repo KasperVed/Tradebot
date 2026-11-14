@@ -39,6 +39,7 @@ class TokenSnapshot:
     has_socials: bool = False
     has_website: bool = False
     boosted: bool = False
+    social_types: tuple[str, ...] = ()
     fetched_at: float = field(default_factory=time.time)
 
     @property
@@ -81,6 +82,8 @@ class Signal:
     score: float  # 0..100
     breakdown: dict[str, float]
     reasons: list[str]
+    ml_prob: float | None = None
+    ml_threshold: float | None = None
 
 
 class Action(str, Enum):

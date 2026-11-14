@@ -1,0 +1,63 @@
+{
+ "entry": {
+  "min_ret5": 0.08,
+  "max_ret5": 0.3,
+  "min_ret60": 0.0,
+  "max_ret60": 3.0,
+  "min_vol_accel": 2.5,
+  "min_green": 0.7,
+  "min_age_min": 10,
+  "max_dd60": 0.2
+ },
+ "exit": {
+  "stop_loss": 0.3,
+  "take_profit": 0.4,
+  "tp_fraction": 1.0,
+  "trailing": 0.15,
+  "max_hold_min": 240,
+  "breakeven_after_tp": true
+ },
+ "results": {
+  "train": {
+   "n": 64,
+   "tokens": 27,
+   "win_rate": 0.421875,
+   "mean": 0.021872542920399085,
+   "median": -0.0645595555343006,
+   "mean_trim2": 0.011244237853315183,
+   "token_mean": 0.012190579139217424,
+   "profit_factor": 1.2334113082675513,
+   "avg_win": 0.27396906038161284,
+   "avg_loss": -0.1620897806323785,
+   "avg_hold": 171.703125
+  },
+  "test": {
+   "n": 88,
+   "tokens": 30,
+   "win_rate": 0.38636363636363635,
+   "mean": -0.019469353147009757,
+   "median": -0.09747470675950254,
+   "mean_trim2": -0.028093059034149517,
+   "token_mean": -0.022350137808324087,
+   "profit_factor": 0.8471243253349918,
+   "avg_win": 0.2792312650603308,
+   "avg_loss": -0.20754011275903902,
+   "avg_hold": 157.0681818181818
+  },
+  "test_random_entry": {
+   "n": 88,
+   "tokens": 30,
+   "win_rate": 0.3409090909090909,
+   "mean": -0.01630563806196331,
+   "median": -0.07518853477642667,
+   "mean_trim2": -0.024855769179683386,
+   "token_mean": -0.04106324248241332,
+   "profit_factor": 0.8457550020858785,
+   "avg_win": 0.26226038926918166,
+   "avg_loss": -0.16039151426772796,
+   "avg_hold": 188.875
+  }
+ },
+ "pools": 99,
+ "candles": 675789
+}

@@ -1,0 +1,72 @@
+{
+ "features": [
+  "time_since_launch_sec",
+  "market_cap_usd",
+  "liquidity_usd",
+  "holder_count",
+  "top10_holder_pct",
+  "dev_remaining_pct",
+  "mint_disabled",
+  "freeze_disabled",
+  "lp_burned_pct",
+  "price_change_1h",
+  "price_change_6h",
+  "has_twitter",
+  "has_website",
+  "has_telegram",
+  "is_boosted",
+  "trade_buy_sell_ratio",
+  "liq_mcap"
+ ],
+ "exits": {
+  "stop_loss": 0.25,
+  "take_profit": 1.0,
+  "tp_fraction": 0.5,
+  "trailing": 0.35,
+  "max_bars_15m": 16
+ },
+ "time_split_test": {
+  "auc": 0.6126,
+  "test_all": {
+   "n": 3626,
+   "win": 0.157,
+   "mean": -0.1136,
+   "median": -0.2907,
+   "pf": 0.5
+  },
+  "test_top_20pct": {
+   "n": 748,
+   "win": 0.257,
+   "mean": -0.0335,
+   "median": -0.2907,
+   "pf": 0.83,
+   "threshold": 0.23960034281986647
+  },
+  "test_top_10pct": {
+   "n": 123,
+   "win": 0.423,
+   "mean": 0.1372,
+   "median": -0.0697,
+   "pf": 1.95,
+   "threshold": 0.4375406895941556
+  },
+  "test_top_5pct": {
+   "n": 22,
+   "win": 0.591,
+   "mean": 0.2501,
+   "median": 0.0968,
+   "pf": 3.28,
+   "threshold": 0.6107816344517631
+  }
+ },
+ "percentiles": {
+  "0.5": 0.11934080776830464,
+  "0.8": 0.20092105169783614,
+  "0.9": 0.3168787614572625,
+  "0.95": 0.5141769440712575,
+  "0.99": 0.7300921920828366
+ },
+ "base_win_rate": 0.1649371927908247,
+ "trained_on": "10986 tokens, 2026-06-10 to 2026-06-29",
+ "source": "https://github.com/ian05012/solana-memecoin-dataset"
+}

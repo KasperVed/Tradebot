@@ -76,6 +76,7 @@ def cfg(tmp_path):
     c.db_path = str(tmp_path / "t.db")
     c.discovery.search_queries = []
     c.discovery.use_geckoterminal = False
+    c.strategy.entry_gate.enabled = True
     c.llm.enabled = False
     return c
 
@@ -126,7 +127,7 @@ def test_risk_sizing_and_limits(cfg, tmp_path):
 def test_full_paper_cycle_buy_take_profit_trail_close(cfg):
     store = Store(cfg.db_path)
     dex = FakeDex()
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None)
     cfg.strategy.rule_buy_threshold = 50
 
     eng.tick()
@@ -136,13 +137,13 @@ def test_full_paper_cycle_buy_take_profit_trail_close(cfg):
     assert store.get_state("paper_cash") < cfg.execution.paper_starting_sol
 
     # Price runs past take-profit -> partial sell, remainder trails.
-    dex.pairs = [make_pair(price=entry * 1.8)]
+    dex.pairs = [make_pair(price=entry * 2.2)]
     eng.tick()
     pos = store.open_positions()
     assert len(pos) == 1 and pos[0].tp_hit
 
-    # Price falls 30% from peak -> trailing stop closes the rest.
-    dex.pairs = [make_pair(price=entry * 1.8 * 0.7)]
+    # Price falls 40% from peak -> trailing stop closes the rest.
+    dex.pairs = [make_pair(price=entry * 2.2 * 0.6)]
     eng.tick()
     assert not [p for p in store.open_positions() if p.mint == MINT]
     closed = store.closed_positions()
@@ -154,7 +155,7 @@ def test_stop_loss(cfg):
     store = Store(cfg.db_path)
     dex = FakeDex()
     cfg.strategy.rule_buy_threshold = 50
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None)
     eng.tick()
     entry = store.open_positions()[0].entry_price
     dex.pairs = [make_pair(price=entry * 0.7)]
@@ -167,7 +168,7 @@ def test_rugged_token_never_bought(cfg):
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 0
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(),
-                 rug=FakeRug(dict(CLEAN_RUG, freezeAuthority="X")), analyst=None)
+                 rug=FakeRug(dict(CLEAN_RUG, freezeAuthority="X")), analyst=None, ml=None)
     eng.tick()
     assert store.open_positions() == []
 
@@ -207,3 +208,51 @@ def test_analyst_parses_structured_decision():
     assert captured["output_config"]["effort"] == "high"
     assert captured["output_config"]["format"]["type"] == "json_schema"
     assert captured["fallbacks"] == "default"
+
+
+def test_ml_model_loads_and_predicts():
+    from fomobot.intelligence.ml import TradeModel, live_features
+
+    m = TradeModel.load()
+    assert m is not None
+    snap = pair_to_snapshot(make_pair())
+    rug = parse_report(CLEAN_RUG)
+    p = m.predict(snap, rug)
+    assert 0.0 <= p <= 1.0
+    f = live_features(snap, rug)
+    assert set(m.features) <= set(f)
+    assert f["top10_holder_pct"] == pytest.approx(0.10)  # fraction, as in training data
+    assert 0 < m.threshold(0.9) < 1
+
+
+def test_ml_gate_blocks_low_probability(cfg):
+    class LowModel:
+        def predict(self, snap, rug):
+            return 0.1
+
+        def threshold(self, q):
+            return 0.5
+
+    store = Store(cfg.db_path)
+    cfg.strategy.rule_buy_threshold = 0
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=LowModel())
+    eng.tick()
+    assert store.open_positions() == []
+
+
+def test_ml_rejects_tokens_outside_training_domain(cfg):
+    class HighModel:
+        def predict(self, snap, rug):
+            return 0.99
+
+        def threshold(self, q):
+            return 0.5
+
+    store = Store(cfg.db_path)
+    cfg.strategy.rule_buy_threshold = 0
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=HighModel())
+    eng.tick()  # FakeDex pair is 3h old, far outside the 30-minute training window
+    assert store.open_positions() == []
+    cfg.ml.max_age_minutes = 1e9
+    eng.tick()
+    assert len(store.open_positions()) == 1

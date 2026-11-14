@@ -70,6 +70,7 @@ def pair_to_snapshot(pair: dict) -> TokenSnapshot | None:
         has_socials=bool(info.get("socials")),
         has_website=bool(info.get("websites")),
         boosted=bool((pair.get("boosts") or {}).get("active")),
+        social_types=tuple(sorted({(x.get("type") or "").lower() for x in info.get("socials") or []})),
         fetched_at=time.time(),
     )
 

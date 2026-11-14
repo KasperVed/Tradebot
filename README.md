@@ -9,31 +9,41 @@ En automatisk trading-bot til Solana-memecoins, bygget til at handle fra den sam
 > **Risiko:** Memecoins er ekstremt risikable, og de fleste ender på nul. Botten kan tabe penge. Start altid i
 > **paper mode** (simuleret handel, standard), og brug kun beløb du har råd til at tabe, når du går live.
 
+## Strategien, og hvorfor
+
+Strategien er bygget på data, ikke mavefornemmelse (se [research/README.md](research/README.md)). Testet på 31.000
+rigtige memecoins:
+
+- At købe alle nye tokens gav **-11 % pr. handel**.
+- Momentum-signaler alene gav **ingen edge** frem for tilfældige køb.
+- En model, der udvælger de bedste 10 % af helt nye tokens, gav **+14-19 % pr. handel** på en uge, den ikke var trænet på.
+
+Botten handler derfor kun helt nye tokens (2-30 minutter gamle), som modellen rangerer i top 10 %.
+
 ## Hvordan botten tænker
 
 Hver 30. sekund kører den denne pipeline:
 
-1. **Opdagelse.** Henter nye og trending Solana-tokens fra DexScreener (nye profiler, boosts og top-boosts,
-   søgninger) og GeckoTerminal (trending og nye pools) plus tokens, den allerede holder øje med.
+1. **Opdagelse.** Henter nye pools fra GeckoTerminal og nye og trending tokens fra DexScreener (profiler, boosts,
+   søgninger) plus tokens, den allerede holder øje med. Nye tokens prioriteres.
 2. **Sikkerhed (hårde filtre).** Afviser tokens med mint- eller freeze-authority, lav LP-lås, en enkelt wallet over
    10 %, top-10-wallets over 30 %, en creator der stadig ejer over 5 %, insider-netværk over 15 %, transfer-fees,
-   for få holders, for lav likviditet, for ung alder eller for få handler. Data kommer fra RugCheck. AMM-pools og
-   lockers tælles ikke med som holders. Et token, der fejler her, bliver aldrig købt.
-3. **Entry-port (backtestet).** Kun setups af den type, der historisk har vist en edge i backtesten: et bestemt
-   5-minutters og 1-times kursudsving, stigende volumen, overvægt af købere og ikke for langt under det seneste top.
-4. **Kvantitativ analyse.** Beregner momentum over flere tidsrammer, volumenacceleration, købstryk (køb/salg),
-   forholdet mellem likviditet og market cap samt EMA-trend, RSI og volatilitet ud fra prishistorik som botten selv
-   gemmer. Resultatet samles i en score fra 0 til 100 med begrundelser. Parabolske stigninger straffes, så botten
-   ikke køber toppen.
-5. **Intelligens (Claude).** Kandidater over score-tærsklen sendes til Claude (Opus 5.5) sammen med porteføljen,
-   **lektioner fra tidligere handler** og **historiske base rates fra backtesten**, så Claudes conviction kalibreres
-   mod virkelige tal. Claude svarer BUY eller SKIP med conviction, positionsstørrelse,
-   take-profit, stop-loss, en tese og risici. Uden en API-nøgle kører botten alene på regler.
+   for få holders, for lav likviditet eller for få handler. Data kommer fra RugCheck. AMM-pools og lockers tælles
+   ikke med som holders. Et token, der fejler her, bliver aldrig købt.
+3. **ML-model (valideret).** En model trænet på ~11.000 rigtige memecoin-handler vurderer sandsynligheden for, at en
+   handel ender i overskud. Den ser på market cap, likviditet, LP-burn, alder, dev-beholdning, momentum, køb/salg og
+   holders. Kun top 10 % går videre, og kun tokens inden for modellens træningsdomæne (≤30 minutter gamle).
+4. **Kvantitativ analyse.** Momentum, volumenacceleration, købstryk, likviditet/market cap, EMA-trend, RSI og
+   volatilitet samles i en score med begrundelser. Den bruges som supplerende information.
+5. **Intelligens (Claude).** Kandidaterne sendes til Claude (Opus 5.5) sammen med modellens sandsynlighed,
+   porteføljen og **lektioner fra tidligere handler**. Claude kan nedlægge veto mod setups med røde flag, som
+   modellen ikke kan se, og vælger conviction, størrelse, take-profit og stop-loss. Uden en API-nøgle køber botten
+   på modellen alene.
 6. **Risikostyring.** Positionsstørrelse skaleres efter conviction. Der er loft over antal positioner, samlet
    eksponering og SOL pr. handel, og der holdes en SOL-reserve til fees. En **daglig tabsgrænse** og en **pause efter
    flere tab i træk** stopper nye køb.
-7. **Exits.** Stop-loss, delvis take-profit (sælger 50 %, resten følger en trailing stop), exit hvis likviditeten
-   kollapser, og en maksimal holdetid.
+7. **Exits (valideret).** Stop-loss 25 %, salg af 50 % ved +100 %, trailing stop 35 % på resten, aldrig under
+   entry efter take-profit, exit hvis likviditeten kollapser, og max 4 timer.
 8. **Læring.** Når en handel lukkes, skriver Claude en kort lektion. Lektionen gemmes og bruges i fremtidige
    beslutninger.
 
@@ -60,7 +70,8 @@ python -m fomobot backtest    # tuner entry og exit på halvdelen af tokens og t
 Backtesten er bevidst konservativ: den køber på næste candles åbning, regner gebyr og slippage ind på begge sider,
 lader stops glide yderligere, og hvis stop-loss og take-profit rammes i samme candle, antager den stop-loss. Den
 sammenligner med tilfældige entries med de samme exits for at vise, om entry-signalet faktisk tilfører noget.
-Resultatet gemmes i `data/history/backtest_result.json` og vises automatisk til Claude.
+Resultatet gemmes i `data/history/backtest_result.json`. Den nuværende konklusion er, at momentum på ældre
+trending-tokens ikke har nogen edge (se research).
 
 Hvad backtesten ikke kan se: holder-data, RugCheck og købs-/salgsantal bagud i tid. De filtre fjerner kun handler,
 så de valideres i paper mode.
@@ -88,11 +99,12 @@ fomobot/
   data/          DexScreener, GeckoTerminal (markedsdata) og RugCheck (sikkerhed)
   analysis/      safety.py (filtre), gate.py (backtestet entry-port), indicators.py, scorer.py
   backtest/      dataset.py (GeckoTerminal-data), engine.py (simulator), report.py
-  intelligence/  analyst.py (Claude: beslutninger og refleksion)
+  intelligence/  analyst.py (Claude: beslutninger og refleksion), ml.py + memecoin_model.joblib (udvælgelse)
   execution/     paper.py (simulering), jupiter.py (live swaps på Solana)
   risk.py        sizing, limits, circuit breakers, exit-regler
   engine.py      hovedloopet
   storage.py     SQLite
+research/        analyse af 31k memecoins og træning af ML-modellen
 tests/           pytest-suite med falske markedsdata
 ```
 

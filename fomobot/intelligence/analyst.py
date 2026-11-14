@@ -35,6 +35,9 @@ How to think:
   10% and 35%, take-profits between 25% and 300%.
 - conviction is your probability-weighted confidence (0-100) that the trade has positive
   expected value. size_multiplier (0.25-1.5) scales position size; use < 1 when unsure.
+- If an ml_model probability is given, it is the most validated signal you have: it passed
+  an out-of-sample test on real trades. Weigh it heavily, and use your judgment mainly to
+  veto setups with red flags the model cannot see.
 - Use the lessons from past trades. They are the bot's own experience.
 - If historical base rates are given, they are out-of-sample backtest results for setups
   that pass the same entry gate. Calibrate conviction against them: a typical setup
@@ -84,6 +87,12 @@ def signal_brief(sig: Signal) -> dict:
         "safety": {
             "score": sig.safety.score, "flags": sig.safety.flags,
             "top_holder_pct": sig.safety.top_holder_pct, "lp_locked_pct": sig.safety.lp_locked_pct,
+        },
+        "ml_model": None if sig.ml_prob is None else {
+            "p_profitable_trade": round(sig.ml_prob, 3),
+            "entry_threshold_top10pct": round(sig.ml_threshold, 3),
+            "note": "trained on ~11k real memecoin trades; out of sample, the top 10% of scores "
+                    "averaged about +14% per trade while all tokens averaged about -11%",
         },
         "quant_score": sig.score,
         "score_breakdown": {k: round(v, 1) for k, v in sig.breakdown.items()},
@@ -169,7 +178,9 @@ class Analyst:
         return out.lesson.strip() if out else None
 
 
-def load_base_rates(path: str) -> dict | None:
+def load_base_rates(path: str | None) -> dict | None:
+    if not path:
+        return None
     try:
         with open(path) as f:
             res = json.load(f)
@@ -191,6 +202,14 @@ def load_base_rates(path: str) -> dict | None:
 def rule_decision(sig: Signal, threshold: float, tp: float, sl: float) -> Decision:
     """Deterministic fallback when Claude is disabled or unavailable."""
     vol = sig.indicators.volatility
+    if sig.ml_prob is not None:  # ML gate already applied upstream; conviction from its probability
+        return Decision(
+            action=Action.BUY if sig.safety.passed else Action.SKIP,
+            conviction=_clamp(50 + (sig.ml_prob - (sig.ml_threshold or 0.4)) * 150, 50, 95),
+            size_multiplier=0.75, take_profit_pct=tp, stop_loss_pct=sl,
+            thesis=f"ML p(profit)={sig.ml_prob:.2f}; " + ("; ".join(sig.reasons) or "rule score"),
+            risks=sig.safety.flags, source="rules+ml",
+        )
     buy = sig.safety.passed and sig.score >= threshold
     return Decision(
         action=Action.BUY if buy else Action.SKIP,

@@ -4,3 +4,7 @@ pydantic>=2.13
 PyYAML>=6.0
 solders>=0.21
 pytest>=8
+scikit-learn~=1.9.1  # must match the version that pickled the bundled model
+pandas>=2.2
+numpy>=2.0
+pyarrow>=17
