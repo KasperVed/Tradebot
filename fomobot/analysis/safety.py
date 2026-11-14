@@ -79,9 +79,13 @@ def assess(snap: TokenSnapshot, rug: dict | None, cfg: SafetyConfig, canonical_g
                 score -= 10
             elif lp_low and canonical_graduation:
                 flags.append("LP burn not yet indexed (canonical pump.fun graduation)")
-            elif lp_low:
+            elif lp_low and cfg.require_lp_locked:
                 hard.append(f"only {rug['lp_locked_pct']:.0f}% LP locked")
-            dangers = [r for r in rug["danger_risks"] if not (canonical_graduation and r in LP_LAG_RISKS)]
+            elif lp_low:
+                flags.append(f"only {rug['lp_locked_pct']:.0f}% LP locked - reduced size")
+                report.size_factor = min(report.size_factor, cfg.unlocked_lp_size_factor)
+            lp_soft = canonical_graduation or not cfg.require_lp_locked
+            dangers = [r for r in rug["danger_risks"] if not (lp_soft and r in LP_LAG_RISKS)]
             if len(dangers) > cfg.max_rugcheck_danger_risks:
                 hard.append("RugCheck danger: " + ", ".join(dangers))
             for w in rug["warn_risks"]:

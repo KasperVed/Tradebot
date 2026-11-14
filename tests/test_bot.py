@@ -308,11 +308,14 @@ def test_lp_lag_waived_only_for_canonical_graduation(cfg):
     fresh = dict(CLEAN_RUG, markets=[{"marketType": "pump_fun_amm", "lp": {"lpLockedPct": 1e-10}}],
                  risks=[{"name": "Large Amount of LP Unlocked", "level": "danger"}])
     rug = parse_report(fresh)
-    assert not safety.assess(snap, rug, cfg.safety).passed
-    rep = safety.assess(snap, rug, cfg.safety, canonical_graduation=True)
-    assert rep.passed and any("not yet indexed" in f for f in rep.flags)
+    strict = cfg.safety.model_copy(update={"require_lp_locked": True})
+    assert not safety.assess(snap, rug, strict).passed
+    soft = safety.assess(snap, rug, cfg.safety)  # default: LP is a soft risk -> half size
+    assert soft.passed and soft.size_factor == 0.5
+    rep = safety.assess(snap, rug, strict, canonical_graduation=True)
+    assert rep.passed and rep.size_factor == 1.0 and any("not yet indexed" in f for f in rep.flags)
     other = dict(fresh, risks=[{"name": "Freeze Authority still enabled", "level": "danger"}])
-    assert not safety.assess(snap, parse_report(other), cfg.safety, canonical_graduation=True).passed
+    assert not safety.assess(snap, parse_report(other), strict, canonical_graduation=True).passed
 
 
 def test_live_executor_closes_only_empty_token_accounts(monkeypatch):

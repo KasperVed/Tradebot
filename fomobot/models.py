@@ -60,6 +60,7 @@ class SafetyReport:
     lp_locked_pct: float | None = None
     mint_authority: bool | None = None
     freeze_authority: bool | None = None
+    size_factor: float = 1.0  # < 1 shrinks the position for soft risks (e.g. unlocked LP)
 
 
 @dataclass

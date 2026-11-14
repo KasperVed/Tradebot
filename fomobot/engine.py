@@ -172,16 +172,20 @@ class Engine:
         graduated = self.store.get_state("graduated", {}) or {}
         in_domain = lambda s: 0 if (s.pair_created_ms and s.age_minutes <= self.cfg.ml.max_age_minutes) else 1
         cands = sorted((s for m, s in snaps.items() if m not in skip), key=lambda s: (in_domain(s), -s.volume_h1))
-        for snap in cands[: self.cfg.discovery.max_candidates]:
+        # The market filter needs no network calls, so run it on everything; only the
+        # survivors (capped by max_candidates) cost RugCheck / model calls.
+        survivors = []
+        for snap in cands:
             funnel["seen"] += 1
             if snap.pair_created_ms and snap.age_minutes <= self.cfg.ml.max_age_minutes:
                 # Young tokens are where the edge is: keep re-checking them while they mature
                 # (e.g. still "too young", or liquidity not yet indexed after graduation).
                 watch.setdefault(snap.mint, time.time())
-            pre = safety.assess(snap, None, pre_cfg)
-            if not pre.passed:
+            if safety.assess(snap, None, pre_cfg).passed:
+                survivors.append(snap)
+            else:
                 funnel["market_filter"] += 1
-                continue
+        for snap in survivors[: self.cfg.discovery.max_candidates]:
             rug = None
             if self.cfg.safety.use_rugcheck:
                 raw = self.rug.report(snap.mint)
@@ -248,6 +252,7 @@ class Engine:
             )
             if decision.action != Action.BUY or not self.trade:
                 continue
+            decision.size_multiplier *= sig.safety.size_factor
             check = self.risk.check_entry(
                 decision, snap.mint, pf["equity_sol"], pf["cash_sol"], positions, pf["exposure_sol"]
             )

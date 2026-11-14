@@ -3,7 +3,7 @@
 # Small account: max 0.1 SOL per trade, max 3 positions, max 25% of the account in play,
 # 0.1 SOL kept for fees, entries stop after a 10% losing day or 3 losses in a row (2h pause).
 # Strategy defaults are backed by research/ (31k real memecoins); see README.
-tick_seconds: 30
+tick_seconds: 30.0
 db_path: fomobot.db
 discovery:
   use_latest_profiles: true
@@ -17,35 +17,37 @@ discovery:
   - raydium
   max_candidates: 80
 safety:
-  min_liquidity_usd: 10000
-  max_liquidity_usd: 5000000
-  min_market_cap_usd: 15000
-  max_market_cap_usd: 20000000
-  min_age_minutes: 2
-  max_age_hours: 72
+  min_liquidity_usd: 10000.0
+  max_liquidity_usd: 5000000.0
+  min_market_cap_usd: 15000.0
+  max_market_cap_usd: 20000000.0
+  min_age_minutes: 2.0
+  max_age_hours: 72.0
   min_txns_h1: 50
-  max_top_holder_pct: 10.0
+  max_top_holder_pct: 20.0
   max_top10_pct: 30.0
   max_creator_pct: 5.0
   max_insider_pct: 15.0
   max_transfer_fee_pct: 0.0
   min_holders: 50
   min_lp_locked_pct: 80.0
+  require_lp_locked: false
+  unlocked_lp_size_factor: 0.5
   reject_mint_authority: true
   reject_freeze_authority: true
   use_rugcheck: true
   max_rugcheck_danger_risks: 0
 strategy:
-  rule_buy_threshold: 70
-  llm_min_score: 60
-  llm_min_conviction: 65
-  default_take_profit_pct: 100
-  default_stop_loss_pct: 25
+  rule_buy_threshold: 70.0
+  llm_min_score: 60.0
+  llm_min_conviction: 65.0
+  default_take_profit_pct: 100.0
+  default_stop_loss_pct: 25.0
   tp_sell_fraction: 0.5
-  trailing_stop_pct: 35
-  max_hold_minutes: 240
-  exit_on_liquidity_drop_pct: 50
-  reentry_cooldown_minutes: 120
+  trailing_stop_pct: 35.0
+  max_hold_minutes: 240.0
+  exit_on_liquidity_drop_pct: 50.0
+  reentry_cooldown_minutes: 120.0
   breakeven_after_tp: true
   entry_gate:
     enabled: false
@@ -55,7 +57,7 @@ strategy:
     max_ret60: 3.0
     min_vol_accel: 0.5
     min_green: 0.45
-    min_age_min: 2
+    min_age_min: 2.0
     max_dd60: 0.4
 risk:
   base_position_pct: 5.0
@@ -65,19 +67,19 @@ risk:
   max_exposure_pct: 25.0
   daily_loss_limit_pct: 10.0
   consecutive_loss_pause: 3
-  pause_minutes: 120
+  pause_minutes: 120.0
   sol_reserve: 0.1
 ml:
   enabled: true
   min_percentile: 0.9
-  max_age_minutes: 30
+  max_age_minutes: 30.0
   reject_out_of_domain: true
   model_path: null
 llm:
   enabled: true
   model: claude-opus-5-5
   effort: high
-  decision_cache_minutes: 20
+  decision_cache_minutes: 20.0
   max_calls_per_hour: 20
   reflect_on_closed_trades: true
   lessons_in_prompt: 12
@@ -93,4 +95,4 @@ execution:
   max_roundtrip_loss_pct: 10.0
   jupiter_base_url: https://lite-api.jup.ag/swap/v1
   priority_fee_lamports: auto
-  confirm_timeout_s: 60
+  confirm_timeout_s: 60.0

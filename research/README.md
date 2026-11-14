@@ -36,12 +36,25 @@ antal holders.
 **4. Brede exits slår scalping.** Med samme udvælgelse gav SL 25 %, salg af halvdelen ved +100 %, trailing stop
 35 % og max 4 timer overskud. Stramme exits (SL 15 %, TP 30 %, 1 time) tabte.
 
+**5. De fleste sikkerhedsfiltre fra andre bots skader.** `filter_check.py` tester filtrene på modellens
+udvalgte handler i test-ugen:
+
+| Filtersæt | Handler | Vindere | Gns. pr. handel | Profit factor |
+|---|---|---|---|---|
+| Ingen filtre | 123 | 42 % | +13,7 % | 1,95 |
+| **Bottens filtre** (dev ≤5 %, holders ≥50, liq ≥$10k, mcap ≥$15k, alder 2-30 min, top-10 ≤30 %) | 48 | **58 %** | **+25,9 %** | **3,67** |
+| Bottens filtre + krav om LP låst ≥80 % | 7 | 29 % | -0,9 % | 0,95 |
+
+Kravet om låst LP fjernede netop de bedste handler. LP-lås er derfor et soft flag med halv positionsstørrelse, ikke en
+afvisning. Rugs er med i resultaterne, fordi et likviditetstræk ses som et kursfald i candles.
+
 ## Hvad botten gør med det
 
 - ML-modellen (`fomobot/intelligence/memecoin_model.joblib`) er porten: kun tokens i modellens top 10 % går videre
   til Claude.
 - Kun tokens på 2-30 minutter, altså modellens træningsdomæne. Ældre tokens afvises, fordi modellen dér kun gætter.
 - Standard-exits: SL 25 %, sælg 50 % ved +100 %, trailing stop 35 %, max 4 timer.
+- Filtrene fra tabellen ovenfor. Ulåst LP giver halv størrelse.
 
 ## Undersøgt, men ikke brugt (endnu)
 
@@ -69,5 +82,6 @@ Derfor: kør botten i paper mode og sammenlign dens faktiske resultater med tabe
 # hent tokens.parquet og ohlcv.parquet fra datasættets data/-mappe til ./ian-data
 python research/memecoin_dataset.py --data ian-data     # analyse
 python research/train_model.py --data ian-data          # træn og gem modellen
+python research/filter_check.py --data ian-data         # hvilke sikkerhedsfiltre hjælper
 python -m fomobot collect && python -m fomobot backtest # candle-backtest på GeckoTerminal-data
 ```

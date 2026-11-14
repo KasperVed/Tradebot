@@ -16,7 +16,8 @@ rigtige memecoins:
 
 - At købe alle nye tokens gav **-11 % pr. handel**.
 - Momentum-signaler alene gav **ingen edge** frem for tilfældige køb.
-- En model, der udvælger de bedste 10 % af helt nye tokens, gav **+14-19 % pr. handel** på en uge, den ikke var trænet på.
+- En model, der udvælger de bedste 10 % af helt nye tokens, gav **+14 % pr. handel** på en uge, den ikke var trænet på,
+  og **+26 % (58 % vindere)** sammen med bottens testede sikkerhedsfiltre (48 handler).
 
 Botten handler derfor kun helt nye tokens (2-30 minutter gamle), som modellen rangerer i top 10 %.
 
@@ -27,10 +28,11 @@ Hver 30. sekund kører den denne pipeline:
 1. **Opdagelse.** Lytter i realtid efter pump.fun-graduations via PumpPortals gratis websocket. Det er netop
    modellens domæne. Derudover henter den nye pools fra GeckoTerminal og nye og trending tokens fra DexScreener.
    Unge tokens bliver på en watchlist og vurderes igen hver tick, indtil de er 30 minutter gamle.
-2. **Sikkerhed (hårde filtre).** Afviser tokens med mint- eller freeze-authority, lav LP-lås, en enkelt wallet over
-   10 %, top-10-wallets over 30 %, en creator der stadig ejer over 5 %, insider-netværk over 15 %, transfer-fees,
-   for få holders, for lav likviditet eller for få handler. Data kommer fra RugCheck. AMM-pools og lockers tælles
-   ikke med som holders. Et token, der fejler her, bliver aldrig købt.
+2. **Sikkerhed (testede filtre).** Afviser tokens med mint- eller freeze-authority, top-10-wallets over 30 %, en
+   creator der stadig ejer over 5 %, insider-netværk over 15 %, transfer-fees, under 50 holders, under $10k
+   likviditet eller under $15k market cap. Data kommer fra RugCheck, og AMM-pools tælles ikke med som holders.
+   Filtrene er testet på 31k tokens: sammen med modellen gav de +26 % pr. handel mod +14 % uden. Et krav om låst LP
+   fjernede de bedste handler, så ulåst LP giver i stedet halv positionsstørrelse.
 3. **ML-model (valideret).** En model trænet på ~11.000 rigtige memecoin-handler vurderer sandsynligheden for, at en
    handel ender i overskud. Den ser på market cap, likviditet, LP-burn, alder, dev-beholdning, momentum, køb/salg og
    holders. Kun top 10 % går videre, og kun tokens inden for modellens træningsdomæne (≤30 minutter gamle).

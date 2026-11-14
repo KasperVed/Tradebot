@@ -28,13 +28,17 @@ class SafetyConfig(BaseModel):
     min_age_minutes: float = 2
     max_age_hours: float = 72  # the ML gate narrows this to its training domain
     min_txns_h1: int = 50
-    max_top_holder_pct: float = 10.0  # largest non-pool wallet
+    max_top_holder_pct: float = 20.0  # largest non-pool wallet (top-10 rule does the real work)
     max_top10_pct: float = 30.0  # top-10 non-pool wallets combined
     max_creator_pct: float = 5.0
     max_insider_pct: float = 15.0  # supply held by RugCheck-detected insider networks
     max_transfer_fee_pct: float = 0.0  # Token-2022 transfer fees eat every trade
     min_holders: int = 50
     min_lp_locked_pct: float = 80.0
+    # Research (research/README.md): among the model's picks, requiring locked LP removed the
+    # BEST trades (+21%/trade). So low LP lock is a soft risk: smaller size, not a rejection.
+    require_lp_locked: bool = False
+    unlocked_lp_size_factor: float = 0.5
     reject_mint_authority: bool = True
     reject_freeze_authority: bool = True
     use_rugcheck: bool = True
