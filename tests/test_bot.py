@@ -355,3 +355,30 @@ def test_live_executor_closes_only_empty_token_accounts(monkeypatch):
     keys = sent[0].message.account_keys
     assert bytes(ix.data) == bytes([9])
     assert str(keys[ix.accounts[0]]) == empty  # only the empty account is closed
+
+
+def test_telegram_notifications_on_buy_and_close(cfg):
+    sent = []
+
+    def handler(request: httpx.Request):
+        sent.append(json.loads(request.content)["text"])
+        return httpx.Response(200, json={"ok": True})
+
+    from fomobot.notify import Notifier
+
+    n = Notifier(token="T", chat_id="1", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    n.send = lambda text, blocking=False, _orig=n.send: _orig(text, blocking=True)
+    store = Store(cfg.db_path)
+    dex = FakeDex()
+    cfg.strategy.rule_buy_threshold = 50
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None,
+                 ml=None, feed=None, quotes=None, notifier=n)
+    eng.tick()
+    entry = store.open_positions()[0].entry_price
+    dex.pairs = [make_pair(price=entry * 0.6)]
+    eng.tick()
+    assert any("KØB TEST" in t for t in sent)
+    assert any("LUKKET TEST" in t and "stop loss" in t for t in sent)
+    assert any("Status" in t for t in sent)
+    assert all(t.startswith("📝 PAPER") for t in sent)
+    assert not Notifier(token="", chat_id="").enabled

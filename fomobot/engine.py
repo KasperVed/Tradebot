@@ -33,6 +33,7 @@ class Engine:
         ml="auto",
         feed="auto",
         quotes="auto",
+        notifier=None,
     ):
         self.cfg, self.store, self.ex = cfg, store, executor
         self.dex = dex or DexScreener()
@@ -63,6 +64,11 @@ class Engine:
         self.ml_threshold = self.ml.threshold(cfg.ml.min_percentile) if self.ml else None
         self.risk = RiskManager(cfg.risk, cfg.strategy, store)
         self.trade = trade  # False = analyse only ("scan")
+        from .notify import Notifier
+
+        self.notify = notifier or Notifier(token="", chat_id="")  # disabled unless given
+        self._last_pause_msg = None
+        self._last_summary_day = None
 
     # --- discovery ------------------------------------------------------------
     def discover(self, positions: list[Position]) -> dict[str, TokenSnapshot]:
@@ -136,6 +142,8 @@ class Engine:
                 signature=fill.signature, mode=self.ex.mode,
             )
             log.info("SELL %s %.0f%% -> %.4f SOL (%s)", pos.symbol, order.fraction * 100, fill.sol_amount, order.reason)
+            if order.fraction < 0.999:
+                self.notify.sold(pos.symbol, order.fraction, fill.sol_amount, order.reason)
             if order.fraction >= 0.999 or pos.token_amount <= 0:
                 self._close(pos, order.reason)
             else:
@@ -148,6 +156,7 @@ class Engine:
         pnl = pos.realized_sol - invested
         self.store.close_position(pos, pnl, reason)
         log.info("CLOSED %s pnl %+.4f SOL (%+.1f%%) - %s", pos.symbol, pnl, pnl / invested * 100 if invested else 0, reason)
+        self.notify.closed(pos.symbol, pnl, pnl / invested * 100 if invested else 0, reason)
         if self.analyst and self.cfg.llm.reflect_on_closed_trades:
             summary = {
                 "symbol": pos.symbol,
@@ -286,6 +295,8 @@ class Engine:
             )
             log.info("BUY %s %.4f SOL @ %.10f SOL (TP +%.0f%% / SL -%.0f%%)", snap.symbol, fill.sol_amount,
                      fill.price_sol, decision.take_profit_pct, decision.stop_loss_pct)
+            self.notify.bought(snap.symbol, snap.mint, fill.sol_amount, decision.take_profit_pct,
+                               decision.stop_loss_pct, decision.thesis)
             positions.append(pos)
 
     # --- loop -----------------------------------------------------------------
@@ -302,16 +313,37 @@ class Engine:
 
         pf = self.portfolio(positions, snaps)
         paused = self.risk.trading_paused(pf["equity_sol"]) if self.trade else None
+        self._daily_summary(pf, len(positions))
         if paused:
             log.warning("Entries paused: %s", paused)
+            if paused != self._last_pause_msg:
+                self.notify.send(f"⏸️ Nye køb sat på pause: {paused}")
+            self._last_pause_msg = paused
             return
+        self._last_pause_msg = None
         signals = self.analyse(snaps, skip={p.mint for p in positions})
         log.info("tick: %d tokens seen, %d candidates, equity %.4f SOL (%d open)",
                  len(snaps), len(signals), pf["equity_sol"], len(positions))
         self.decide_and_enter(signals, positions, snaps)
 
+    def _daily_summary(self, pf: dict, open_positions: int) -> None:
+        from datetime import datetime, timezone
+
+        day = datetime.now(timezone.utc).date().isoformat()
+        if day == self._last_summary_day:
+            return
+        self._last_summary_day = day
+        closed = self.store.closed_positions()
+        start = self.store.get_state("start_equity")
+        if start is None:
+            start = pf["equity_sol"]
+            self.store.set_state("start_equity", start)
+        wins = sum(1 for r in closed if (r["pnl_sol"] or 0) > 0)
+        self.notify.summary(pf["equity_sol"], start or pf["equity_sol"], len(closed), wins, open_positions)
+
     def run(self) -> None:
         log.info("FOMO bot running in %s mode", self.ex.mode.upper())
+        self.notify.send(f"🤖 Botten er startet ({self.ex.mode})")
         n = 0
         while True:
             start = time.time()

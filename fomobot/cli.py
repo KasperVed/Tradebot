@@ -31,7 +31,12 @@ def build_engine(cfg, store, live: bool, trade: bool):
             analyst = Analyst(cfg.llm)
         else:
             logging.warning("LLM enabled but no ANTHROPIC_API_KEY set - running on rules only")
-    return Engine(cfg, store, executor, analyst=analyst, trade=trade)
+    from .notify import Notifier
+
+    notifier = Notifier(mode="live" if live else "paper")
+    if notifier.enabled:
+        logging.info("Telegram notifications on")
+    return Engine(cfg, store, executor, analyst=analyst, trade=trade, notifier=notifier)
 
 
 def cmd_status(store: Store) -> None:

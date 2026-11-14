@@ -65,6 +65,17 @@ python -m fomobot status      # åbne positioner
 python -m fomobot report      # resultater, win rate og lærte lektioner
 ```
 
+## Følg botten fra telefonen (Telegram)
+
+Botten kan skrive til dig ved hvert køb, salg og lukket handel med P&L og sende en daglig status. Opsætningen tager
+2 minutter og kan klares fra telefonen:
+
+1. Skriv til **@BotFather** i Telegram, send `/newbot` og kopiér token til `TELEGRAM_BOT_TOKEN` i `.env`.
+2. Send en besked til din nye bot. Åbn `https://api.telegram.org/bot<TOKEN>/getUpdates` og kopiér `"chat":{"id":...}`
+   til `TELEGRAM_CHAT_ID`.
+
+Hver besked starter med 📝 PAPER eller 🔴 LIVE, så en simuleret handel aldrig kan forveksles med en rigtig.
+
 ## Backtest på rigtige data
 
 ```bash
