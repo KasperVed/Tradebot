@@ -153,6 +153,10 @@ class Engine:
         cands = sorted((s for m, s in snaps.items() if m not in skip), key=lambda s: (in_domain(s), -s.volume_h1))
         for snap in cands[: self.cfg.discovery.max_candidates]:
             funnel["seen"] += 1
+            if snap.pair_created_ms and snap.age_minutes <= self.cfg.ml.max_age_minutes:
+                # Young tokens are where the edge is: keep re-checking them while they mature
+                # (e.g. still "too young", or liquidity not yet indexed after graduation).
+                watch.setdefault(snap.mint, time.time())
             pre = safety.assess(snap, None, pre_cfg)
             if not pre.passed:
                 funnel["market_filter"] += 1
