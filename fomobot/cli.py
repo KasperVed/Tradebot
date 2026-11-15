@@ -97,7 +97,7 @@ def cmd_report(store: Store) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="fomobot", description="Solana memecoin trading bot (FOMO wallet compatible)")
-    ap.add_argument("command", choices=["run", "scan", "status", "report", "wallet", "dashboard", "collect", "backtest"])
+    ap.add_argument("command", choices=["run", "scan", "status", "report", "wallet", "dashboard", "retrain", "collect", "backtest"])
     ap.add_argument("--dashboard", action="store_true", help="with run: also serve the phone dashboard")
     ap.add_argument("--port", type=int, default=8080, help="dashboard port")
     ap.add_argument("--data", default="data/history", help="dataset dir for collect/backtest")
@@ -140,6 +140,10 @@ def main(argv: list[str] | None = None) -> None:
         return cmd_status(store)
     if args.command == "report":
         return cmd_report(store)
+    if args.command == "retrain":
+        from .learn import retrain_command
+
+        return retrain_command(cfg, store)
     if args.command == "dashboard":
         from .dashboard import serve
 

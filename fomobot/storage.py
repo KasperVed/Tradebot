@@ -30,6 +30,9 @@ CREATE INDEX IF NOT EXISTS prices_mint_ts ON prices(mint, ts);
 CREATE TABLE IF NOT EXISTS lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, position_id INTEGER, lesson TEXT);
 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS equity (ts REAL, equity_sol REAL);
+CREATE TABLE IF NOT EXISTS observations (
+    ts REAL, mint TEXT UNIQUE, pair TEXT, price_sol REAL, prob REAL, features TEXT, label REAL, labeled_at REAL
+);
 """
 
 POS_COLS = [
@@ -74,6 +77,11 @@ class Store:
             "SELECT liquidity_usd FROM prices WHERE mint=? AND ts>=? ORDER BY ts ASC LIMIT 1", (mint, since)
         ).fetchone()
         return row["liquidity_usd"] if row else None
+
+    def add_observation(self, mint: str, pair: str, price_sol: float, prob: float, features: dict) -> None:
+        """First time the model scores a token (one row per token, like the training data)."""
+        self.db.execute("INSERT OR IGNORE INTO observations (ts, mint, pair, price_sol, prob, features) "
+                        "VALUES (?,?,?,?,?,?)", (time.time(), mint, pair, price_sol, prob, json.dumps(features)))
 
     def add_equity(self, equity_sol: float) -> None:
         self.db.execute("INSERT INTO equity VALUES (?, ?)", (time.time(), equity_sol))

@@ -228,6 +228,11 @@ class Engine:
                     continue
             elif self.ml:
                 prob = self.ml.predict(snap, rug)
+                if snap.pair_address:  # self-learning: remember what the model saw (fomobot retrain)
+                    from .intelligence.ml import live_features
+
+                    self.store.add_observation(snap.mint, snap.pair_address, snap.price_sol, prob,
+                                               live_features(snap, rug))
                 if prob < self.ml_threshold:
                     funnel["ml_model"] += 1
                     log.debug("ml %s: p=%.2f < %.2f", snap.symbol, prob, self.ml_threshold)

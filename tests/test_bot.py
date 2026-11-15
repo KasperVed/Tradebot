@@ -501,3 +501,36 @@ def test_ml_confidence_tier_sizes_positions(cfg):
         eng.tick()
         sizes[label] = store.open_positions()[0].cost_sol
     assert sizes["top"] == pytest.approx(sizes["low"] * 1.25 / 0.75, rel=0.01)
+
+
+def test_learn_simulate_matches_ladder_rules():
+    from fomobot.learn import simulate
+
+    strat = Config().strategy
+    flat = [[i * 60, 1, 1, 1, 1, 1] for i in range(10)]
+    assert simulate(flat, strat) == pytest.approx((1 - 0.025) / 1.025 - 1, rel=1e-3)
+    crash = [[0, 1, 1, 1, 1, 1], [60, 1, 1, 0.5, 0.5, 1]]
+    assert simulate(crash, strat) < -0.25
+
+
+def test_retrain_needs_data_then_only_keeps_a_better_model(cfg, tmp_path):
+    import random
+
+    from fomobot.learn import retrain
+
+    store = Store(cfg.db_path)
+    assert retrain(store, cfg)["status"] == "not enough data"
+    random.seed(1)
+    feats = ["time_since_launch_sec", "market_cap_usd", "liquidity_usd", "holder_count", "top10_holder_pct",
+             "dev_remaining_pct", "mint_disabled", "freeze_disabled", "lp_burned_pct", "price_change_1h",
+             "price_change_6h", "has_twitter", "has_website", "has_telegram", "is_boosted",
+             "trade_buy_sell_ratio", "liq_mcap"]
+    for i in range(400):
+        f = {k: random.random() for k in feats}
+        label = 0.3 if f["liq_mcap"] > 0.7 else -0.2  # a pattern the new model can learn
+        store.db.execute("INSERT INTO observations VALUES (?,?,?,?,?,?,?,?)",
+                         (i, f"M{i}", "P", 1.0, random.random(), json.dumps(f), label, i))
+    store.commit()
+    res = retrain(store, cfg, out_path=str(tmp_path / "m.joblib"))
+    assert res["new_top_mean"] > res["holdout_all_mean"]
+    assert res["status"].startswith("new model") and (tmp_path / "m.joblib").exists()

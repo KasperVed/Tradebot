@@ -51,8 +51,14 @@ Hver 30. sekund kører den denne pipeline:
    trailing stop på 35 %. Stop-loss er 25 %, botten sælger aldrig under entry efter første trin, går ud hvis
    likviditeten kollapser, og holder højst 4 timer. Testet mod én stor take-profit: samme snit, men 67 % vindende
    handler i stedet for 58 %.
-9. **Læring.** Når en handel lukkes, skriver Claude en kort lektion. Lektionen gemmes og bruges i fremtidige
-   beslutninger.
+9. **Hurtige exits.** Mellem scanningerne tjekkes prisen på åbne positioner hvert 2. sekund via Jupiter, så
+   stop-loss og salgstrin udløses inden for sekunder i stedet for op til 30 sekunder.
+10. **Størrelse efter sikkerhed.** Modellens top 5 % får 1,25x størrelse og top 5-10 % får 0,75x. I testen gav top 5 %
+    +37 % pr. handel mod +19 %.
+11. **Læring.** Når en handel lukkes, skriver Claude en kort lektion, der bruges i fremtidige beslutninger. Botten
+    gemmer også alle tokens, modellen vurderer. `fomobot retrain` (fx en gang om ugen) måler, hvordan det gik dem
+    bagefter med rigtige kurser, og træner en ny model på bottens egne data. Den nye model gemmes kun, hvis den slår
+    den nuværende på data, den ikke er trænet på.
 
 Alt logges i SQLite (`fomobot.db`): beslutninger med begrundelse, handler, positioner, priser og lektioner.
 

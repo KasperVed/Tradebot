@@ -60,6 +60,15 @@ afvisning. Rugs er med i resultaterne, fordi et likviditetstræk ses som et kurs
 Forskellen i gennemsnit ligger inden for støj ved 48 handler. Stigen i 3 trin vinder oftere og har den bedste profit
 factor, så den er standard.
 
+**7. Højere modelscore giver bedre handler.** Blandt bottens handler i test-ugen:
+
+| Modelscore | Handler | Vindere | Gns. pr. handel |
+|---|---|---|---|
+| Top 90-95 % | 30 | 50 % | +19,3 % |
+| Top 95-100 % | 18 | 72 % | +37,0 % |
+
+Størrelse efter score (1,25x / 0,75x) hæver gennemsnittet fra +25,9 % til +28,1 %.
+
 ## Hvad botten gør med det
 
 - ML-modellen (`fomobot/intelligence/memecoin_model.joblib`) er porten: kun tokens i modellens top 10 % går videre
