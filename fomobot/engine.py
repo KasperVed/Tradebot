@@ -254,7 +254,8 @@ class Engine:
                 decision.action = Action.SKIP
             self.store.record_decision(
                 snap.mint, snap.symbol, sig.score, decision.action.value, decision.conviction, decision.source,
-                decision.thesis, {"risks": decision.risks, "reasons": sig.reasons, "breakdown": sig.breakdown},
+                decision.thesis, {"risks": decision.risks, "reasons": sig.reasons, "breakdown": sig.breakdown,
+                 "meme_score": decision.meme_score, "ml_prob": sig.ml_prob},
             )
             log.info(
                 "%s %s score=%.0f conviction=%.0f [%s] %s",

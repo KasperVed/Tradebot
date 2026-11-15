@@ -70,6 +70,24 @@ def cmd_report(store: Store) -> None:
     print("\nLast 10:")
     for r in closed[:10]:
         print(f"  {r['symbol']:<12} {r['pnl_sol']:+.4f} SOL  {r['exit_reason']}")
+    # Does Claude's meme score predict results? (needs Claude on, and many trades to mean anything)
+    import json as _json
+
+    scored = []
+    for r in closed:
+        d = store.db.execute("SELECT payload FROM decisions WHERE mint=? AND action='BUY' AND ts<=? "
+                             "ORDER BY ts DESC LIMIT 1", (r["mint"], r["opened_at"] + 60)).fetchone()
+        ms = _json.loads(d["payload"]).get("meme_score") if d else None
+        if ms is not None:
+            scored.append((ms, r["pnl_sol"] or 0))
+    if scored:
+        hi = [p for m, p in scored if m >= 6]
+        lo = [p for m, p in scored if m < 6]
+        print(f"\nMeme score vs result ({len(scored)} trades, meaningful from ~30):")
+        for name, xs in (("meme >= 6", hi), ("meme < 6", lo)):
+            if xs:
+                print(f"  {name}: {len(xs)} trades, win rate {sum(x > 0 for x in xs) / len(xs):.0%}, "
+                      f"avg {sum(xs) / len(xs):+.4f} SOL")
     lessons = store.lessons(10)
     if lessons:
         print("\nLessons learned:")

@@ -40,6 +40,8 @@ class TokenSnapshot:
     has_website: bool = False
     boosted: bool = False
     social_types: tuple[str, ...] = ()
+    image_url: str | None = None
+    description: str | None = None
     fetched_at: float = field(default_factory=time.time)
 
     @property
@@ -102,6 +104,7 @@ class Decision:
     thesis: str
     risks: list[str]
     source: str  # "llm" or "rules"
+    meme_score: float | None = None  # Claude's 0-10 read on meme appeal (logged, not yet validated)
 
 
 @dataclass

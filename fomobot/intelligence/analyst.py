@@ -43,6 +43,12 @@ How to think:
   that pass the same entry gate. Calibrate conviction against them: a typical setup
   should get a conviction close to what the base rate justifies, not higher.
 
+Meme appeal: memecoins live on attention. Judge the name, ticker, description and image as
+a meme: is it genuinely funny or culturally timely, instantly understandable, shareable, and
+original rather than one of dozens of copies of the same trend? Give meme_score 0-10 and one
+line in meme_reason. Treat it as a secondary signal: the numbers and the ML model come first,
+and an obviously viral meme often means you are late.
+
 Be concise and concrete in the thesis: name the specific numbers that drive the call."""
 
 REFLECT_PROMPT = """You review closed trades for an automated Solana memecoin bot.
@@ -60,6 +66,8 @@ class EntryDecision(BaseModel):
     stop_loss_pct: float
     thesis: str
     risks: list[str]
+    meme_score: float = Field(description="0-10 meme appeal")
+    meme_reason: str
 
 
 class Lesson(BaseModel):
@@ -112,7 +120,7 @@ class Analyst:
         self._calls = [t for t in self._calls if now - t < 3600]
         return len(self._calls) < self.cfg.max_calls_per_hour
 
-    def _parse(self, system: str, user: str, schema: type[BaseModel], max_tokens: int = 16000):
+    def _parse(self, system: str, user, schema: type[BaseModel], max_tokens: int = 16000):
         self._calls.append(time.time())
         resp = self.client.beta.messages.parse(
             model=self.cfg.model,
@@ -137,8 +145,11 @@ class Analyst:
         if not self._budget_ok():
             log.info("LLM hourly call budget reached; using rules")
             return None
-        user = (
-            "Candidate token:\n" + json.dumps(signal_brief(sig), indent=1)
+        brief = signal_brief(sig)
+        if sig.snapshot.description:
+            brief["token"]["description"] = sig.snapshot.description
+        text = (
+            "Candidate token:\n" + json.dumps(brief, indent=1)
             + "\n\nPortfolio:\n" + json.dumps(portfolio, indent=1)
             + "\n\nLessons from past trades (newest first):\n"
             + ("\n".join(f"- {l}" for l in lessons) if lessons else "- none yet")
@@ -146,8 +157,22 @@ class Analyst:
                if self.base_rates else "")
             + "\n\nDecide: BUY or SKIP."
         )
+        user: list[dict] = []
+        if sig.snapshot.image_url:  # let Claude see the meme itself
+            user.append({"type": "image", "source": {"type": "url", "url": sig.snapshot.image_url}})
+        user.append({"type": "text", "text": text})
         try:
             out: EntryDecision | None = self._parse(SYSTEM_PROMPT, user, EntryDecision)
+        except anthropic.BadRequestError as e:
+            if not sig.snapshot.image_url:
+                log.warning("Claude API error: %s; using rules", e)
+                return None
+            log.info("image rejected (%s); retrying without it", e)  # dead or unsupported image URL
+            try:
+                out = self._parse(SYSTEM_PROMPT, [user[-1]], EntryDecision)
+            except (anthropic.APIConnectionError, anthropic.APIStatusError) as e2:
+                log.warning("Claude API error: %s; using rules", e2)
+                return None
         except anthropic.RateLimitError:
             log.warning("Claude rate limited; using rules")
             return None
@@ -162,9 +187,10 @@ class Analyst:
             size_multiplier=_clamp(out.size_multiplier, 0.25, 1.5),
             take_profit_pct=_clamp(out.take_profit_pct, 15, 300),
             stop_loss_pct=_clamp(out.stop_loss_pct, 5, 40),
-            thesis=out.thesis,
+            thesis=out.thesis + f" | meme {out.meme_score:.0f}/10: {out.meme_reason}",
             risks=out.risks,
             source="llm",
+            meme_score=_clamp(out.meme_score, 0, 10),
         )
 
     def reflect(self, trade_summary: dict) -> str | None:

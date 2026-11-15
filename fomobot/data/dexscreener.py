@@ -71,6 +71,7 @@ def pair_to_snapshot(pair: dict) -> TokenSnapshot | None:
         has_website=bool(info.get("websites")),
         boosted=bool((pair.get("boosts") or {}).get("active")),
         social_types=tuple(sorted({(x.get("type") or "").lower() for x in info.get("socials") or []})),
+        image_url=info.get("imageUrl"),
         fetched_at=time.time(),
     )
 
@@ -88,6 +89,7 @@ def best_snapshots(pairs: list[dict]) -> dict[str, TokenSnapshot]:
 class DexScreener:
     def __init__(self, client: httpx.Client | None = None):
         self.http = client or httpx.Client(base_url=BASE, timeout=15, headers={"Accept": "application/json"})
+        self.descriptions: dict[str, str] = {}  # mint -> project description from token profiles
 
     def _get(self, path: str):
         for attempt in range(3):
@@ -105,7 +107,13 @@ class DexScreener:
 
     def latest_profile_mints(self) -> list[str]:
         data = self._get("/token-profiles/latest/v1") or []
-        return [d["tokenAddress"] for d in data if d.get("chainId") == "solana" and d.get("tokenAddress")]
+        out = []
+        for d in data:
+            if d.get("chainId") == "solana" and d.get("tokenAddress"):
+                out.append(d["tokenAddress"])
+                if d.get("description"):
+                    self.descriptions[d["tokenAddress"]] = d["description"][:500]
+        return out
 
     def boosted_mints(self) -> list[str]:
         data = self._get("/token-boosts/latest/v1") or []
@@ -129,4 +137,7 @@ class DexScreener:
         return pairs
 
     def snapshots(self, mints: list[str]) -> dict[str, TokenSnapshot]:
-        return best_snapshots(self.pairs_for_tokens(list(dict.fromkeys(mints)))) if mints else {}
+        snaps = best_snapshots(self.pairs_for_tokens(list(dict.fromkeys(mints)))) if mints else {}
+        for mint, s in snaps.items():
+            s.description = self.descriptions.get(mint)
+        return snaps

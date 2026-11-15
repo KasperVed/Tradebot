@@ -188,7 +188,8 @@ def test_analyst_parses_structured_decision():
         body = json.loads(request.content)
         captured.update(body)
         out = {"action": "BUY", "conviction": 82, "size_multiplier": 3.0, "take_profit_pct": 80,
-               "stop_loss_pct": 18, "thesis": "volume 3x with 70% buys", "risks": ["young pair"]}
+               "stop_loss_pct": 18, "thesis": "volume 3x with 70% buys", "risks": ["young pair"],
+               "meme_score": 7, "meme_reason": "funny, original"}
         return httpx.Response(200, json={
             "id": "msg_1", "type": "message", "role": "assistant", "model": body["model"],
             "content": [{"type": "text", "text": json.dumps(out)}],
@@ -199,6 +200,7 @@ def test_analyst_parses_structured_decision():
     client = anthropic.Anthropic(api_key="test", http_client=httpx.Client(transport=httpx.MockTransport(handler)))
     analyst = Analyst(LLMConfig(), client=client)
     snap = pair_to_snapshot(make_pair())
+    snap.image_url, snap.description = "https://img/x.png", "a frog that surfs"
     rep = safety.assess(snap, parse_report(CLEAN_RUG), Config().safety)
     sig = scorer.score(snap, rep, indicators.compute(snap, []))
     d = analyst.decide(sig, {"cash_sol": 5}, ["lesson one"])
@@ -208,6 +210,10 @@ def test_analyst_parses_structured_decision():
     assert captured["output_config"]["effort"] == "high"
     assert captured["output_config"]["format"]["type"] == "json_schema"
     assert captured["fallbacks"] == "default"
+    assert d.meme_score == 7 and "meme 7/10" in d.thesis
+    content = captured["messages"][0]["content"]
+    assert content[0]["type"] == "image" and content[0]["source"]["url"] == "https://img/x.png"
+    assert "description" in content[-1]["text"]
 
 
 def test_ml_model_loads_and_predicts():
