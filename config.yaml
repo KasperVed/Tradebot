@@ -45,17 +45,18 @@ strategy:
   default_stop_loss_pct: 25.0
   tp_sell_fraction: 0.5
   take_profit_ladder:
-  - - 50
+  - - 50.0
     - 0.25
-  - - 100
+  - - 100.0
     - 0.25
-  - - 200
+  - - 200.0
     - 0.25
   trailing_stop_pct: 35.0
   max_hold_minutes: 240.0
   exit_on_liquidity_drop_pct: 50.0
   reentry_cooldown_minutes: 120.0
   breakeven_after_tp: true
+  fast_exit_seconds: 2.0
   entry_gate:
     enabled: false
     min_ret5: -0.05
@@ -80,7 +81,11 @@ ml:
   enabled: true
   min_percentile: 0.9
   max_age_minutes: 30.0
+  top_tier_percentile: 0.95
+  top_tier_size: 1.25
+  lower_tier_size: 0.75
   reject_out_of_domain: true
+  require_pumpfun: true
   model_path: null
 llm:
   enabled: true

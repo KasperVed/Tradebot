@@ -17,7 +17,7 @@ in its top 10% and that pass tested safety filters; sell in steps; stop out fast
 
 ```bash
 pip install -e .            # installs the `fomobot` command
-python -m pytest            # 33 tests, all must pass; also run `python -m pyflakes fomobot tests`
+python -m pytest            # 34 tests, all must pass; also run `python -m pyflakes fomobot tests`
 fomobot wallet              # create the bot's own Solana wallet (key -> .env, never printed)
 fomobot scan                # one analysis pass, no trading
 fomobot run --dashboard     # paper trading + phone dashboard on http://<lan-ip>:8080
@@ -38,7 +38,9 @@ Secrets live only in `.env` (see `.env.example`): `ANTHROPIC_API_KEY`, `SOLANA_R
 2. **Market filter** (no network calls, runs on every token) then **RugCheck safety** on the survivors
    (`analysis/safety.py`, `data/rugcheck.py`).
 3. **ML gate** (`intelligence/ml.py`, bundled `memecoin_model.joblib`): only tokens inside the training
-   domain (age <= 30 min) and >= the model's 90th percentile pass.
+   domain (pump.fun tokens, age <= 30 min) and >= the model's 90th percentile pass. pump.fun is detected
+   by the mint suffix "pump", a PumpPortal graduation or RugCheck's launchpad field; Bags/LaunchLab/
+   Raydium launches are rejected (the model never saw them).
 4. **Rule score** (`analysis/scorer.py`, indicators) as secondary info. The price-action entry gate
    (`analysis/gate.py`) exists but is **off** by default (no proven edge).
 5. **Claude analyst** (`intelligence/analyst.py`, model `claude-opus-5-5`, structured output via

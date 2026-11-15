@@ -19,6 +19,13 @@ log = logging.getLogger("fomobot")
 WATCH_SECONDS = 3 * 3600
 
 
+def is_pumpfun(mint: str, rug: dict | None, graduated: dict) -> bool:
+    """pump.fun mints end in "pump"; PumpPortal-confirmed graduations and RugCheck's launchpad
+    field cover the rest."""
+    return (mint.endswith("pump") or mint in graduated
+            or str((rug or {}).get("launchpad") or "").lower().replace(".", "") == "pumpfun")
+
+
 class Engine:
     def __init__(
         self,
@@ -222,7 +229,8 @@ class Engine:
                 log.debug("gate %s: %s", snap.symbol, gate_fails)
                 continue
             prob = None
-            if self.ml and snap.age_minutes > self.cfg.ml.max_age_minutes:
+            if self.ml and (snap.age_minutes > self.cfg.ml.max_age_minutes
+                            or (self.cfg.ml.require_pumpfun and not is_pumpfun(snap.mint, rug, graduated))):
                 if self.cfg.ml.reject_out_of_domain:
                     funnel["ml_model"] += 1
                     continue

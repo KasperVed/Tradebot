@@ -112,6 +112,9 @@ class MLConfig(BaseModel):
     top_tier_size: float = 1.25
     lower_tier_size: float = 0.75
     reject_out_of_domain: bool = True
+    # The model only knows pump.fun graduations. Tokens from other launchpads (Bags, Raydium
+    # LaunchLab, ...) are outside its training data, so its score means little for them.
+    require_pumpfun: bool = True
     model_path: str | None = None  # default: bundled fomobot/intelligence/memecoin_model.joblib
 
 

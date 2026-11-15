@@ -16,7 +16,7 @@ from fomobot.models import WSOL_MINT, Action, Decision
 from fomobot.risk import RiskManager
 from fomobot.storage import Store
 
-MINT = "Tok1111111111111111111111111111111111111111"
+MINT = "Tok111111111111111111111111111111111111pump"
 
 
 def make_pair(price=0.0001, liq=60_000, mcap=400_000, m5=4.0, h1=25.0, buys=300, sells=150, vol_m5=12_000, mint=MINT):
@@ -256,6 +256,15 @@ def test_ml_gate_blocks_low_probability(cfg):
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=LowModel(), feed=None, quotes=None, prices=None)
     eng.tick()
     assert store.open_positions() == []
+
+
+def test_is_pumpfun_detection():
+    from fomobot.engine import is_pumpfun
+
+    assert is_pumpfun("Abc123pump", None, {})
+    assert not is_pumpfun("XoS3U9NjchRcKe5V33FqRChRaMnNgxyz3tRQVAUBAGS", None, {})  # Bags launch
+    assert is_pumpfun("Xyz", {"launchpad": "Pump.Fun"}, {})
+    assert is_pumpfun("Xyz", None, {"Xyz": 1.0})
 
 
 def test_ml_rejects_tokens_outside_training_domain(cfg):
