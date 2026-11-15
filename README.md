@@ -65,6 +65,21 @@ python -m fomobot status      # åbne positioner
 python -m fomobot report      # resultater, win rate og lærte lektioner
 ```
 
+## Dashboard på telefonen
+
+```bash
+fomobot run --dashboard     # botten + dashboard
+fomobot dashboard           # kun dashboardet
+```
+
+Åbn adressen, der vises i loggen (fx `http://192.168.1.20:8080`), på telefonen på samme Wi-Fi. Du ser de fire agenter
+(Scanner, Analyst, Executor, Risk), saldo-graf, åbne positioner og live-aktivitet. Siden kan kun læse og viser
+ingen nøgler.
+
+<img src="dashboard_demo.png" width="280" alt="Dashboard med demodata">
+
+*(Skærmbilledet viser demodata.)*
+
 ## Følg botten fra telefonen (Telegram)
 
 Botten kan skrive til dig ved hvert køb, salg og lukket handel med P&L og sende en daglig status. Opsætningen tager

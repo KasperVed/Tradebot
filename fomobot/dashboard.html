@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08090c">
+<title>FOMO Bot</title>
+<style>
+  :root {
+    --bg: #08090c; --card: #12141a; --card2: #1a1d25; --line: #232733;
+    --text: #f2f4f8; --muted: #8a91a3; --green: #22c55e; --red: #ef4444;
+    --amber: #f59e0b; --blue: #3b82f6; --violet: #8b5cf6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px 32px;
+    max-width: 560px; margin-inline: auto;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .brand { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--card2); color: var(--muted); }
+  .badge.live { background: rgba(239,68,68,.15); color: var(--red); }
+  .equity { font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 0; }
+  .equity small { font-size: 18px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+  .change { font-weight: 700; margin-top: 2px; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .mut { color: var(--muted); }
+  svg.chart { width: 100%; height: 150px; display: block; margin: 14px 0 6px; }
+  .stats { display: flex; gap: 8px; margin-bottom: 22px; }
+  .stat { flex: 1; background: var(--card); border-radius: 14px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 17px; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  h2 { font-size: 20px; margin: 22px 0 10px; display: flex; justify-content: space-between; align-items: baseline; }
+  h2 span { font-size: 13px; color: var(--green); font-weight: 600; }
+  .agents { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .agent { background: var(--card); border-radius: 16px; padding: 12px; min-height: 118px; }
+  .agent .name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .agent .icon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; }
+  .agent .state { font-size: 12px; margin: 2px 0 8px 34px; }
+  .agent .kv { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  .agent .kv b { color: var(--text); font-weight: 600; }
+  .list { background: var(--card); border-radius: 16px; padding: 4px 12px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none; }
+  .row .mid { flex: 1; min-width: 0; }
+  .row .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .r { text-align: right; font-weight: 700; font-size: 14px; }
+  .empty { color: var(--muted); padding: 16px 0; text-align: center; font-size: 14px; }
+  .warn { background: rgba(245,158,11,.12); color: var(--amber); border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; display: none; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot" id="dot"></span>FOMO Bot</div>
+  <span class="badge" id="mode">PAPER</span>
+</header>
+
+<div class="warn" id="warn"></div>
+<p class="equity" id="equity">–<small>SOL</small></p>
+<div class="change mut" id="change">venter på data…</div>
+<svg class="chart" id="chart" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
+
+<div class="stats">
+  <div class="stat"><b id="s-closed">0</b><span>lukkede handler</span></div>
+  <div class="stat"><b id="s-wr">–</b><span>win rate</span></div>
+  <div class="stat"><b id="s-pnl">0</b><span>P&amp;L (SOL)</span></div>
+</div>
+
+<h2>Agenter <span id="running">–</span></h2>
+<div class="agents" id="agents"></div>
+
+<h2>Åbne positioner</h2>
+<div class="list" id="positions"><div class="empty">Ingen åbne positioner</div></div>
+
+<h2>Aktivitet</h2>
+<div class="list" id="activity"><div class="empty">Ingen aktivitet endnu</div></div>
+
+<footer id="foot">Opdaterer hvert 5. sekund</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ago = (ts, now) => { const m = Math.max(0, Math.round((now - ts) / 60)); return m < 1 ? "nu" : m < 60 ? m + " min" : Math.round(m / 60) + " t"; };
+const clock = (ts) => new Date(ts * 1000).toLocaleTimeString("da-DK", {hour: "2-digit", minute: "2-digit"});
+const fmt = (x, d = 4) => (x >= 0 ? "+" : "") + Number(x).toFixed(d);
+const color = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 60% 45%)`; };
+
+function chart(points) {
+  const svg = $("chart");
+  if (points.length < 2) { svg.innerHTML = ""; return; }
+  const ys = points.map((p) => p[1]), xs = points.map((p) => p[0]);
+  const minY = Math.min(...ys), maxY = Math.max(...ys), pad = (maxY - minY) * 0.15 || maxY * 0.01 || 1;
+  const x = (t) => ((t - xs[0]) / (xs.at(-1) - xs[0] || 1)) * 400;
+  const y = (v) => 140 - ((v - minY + pad) / (maxY - minY + 2 * pad)) * 130;
+  const up = ys.at(-1) >= ys[0], c = up ? "var(--green)" : "var(--red)";
+  const d = points.map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + "," + y(p[1]).toFixed(1)).join(" ");
+  svg.innerHTML = `<defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="${up ? "#22c55e" : "#ef4444"}" stop-opacity=".25"/><stop offset="1" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L400,150 L0,150 Z" fill="url(#g)"/>
+    <path d="${d}" fill="none" stroke="${c}" stroke-width="2.2" vector-effect="non-scaling-stroke"/>
+    <circle cx="${x(xs.at(-1))}" cy="${y(ys.at(-1))}" r="4" fill="${c}"/>`;
+}
+
+function agentCard(name, icon, bg, stateText, stateClass, rows) {
+  return `<div class="agent"><div class="name"><span class="icon" style="background:${bg}">${icon}</span>${name}</div>
+    <div class="state ${stateClass}">• ${esc(stateText)}</div>
+    ${rows.map(([k, v]) => `<div class="kv">${k}<b>${esc(v)}</b></div>`).join("")}</div>`;
+}
+
+function render(d) {
+  const a = d.agents || {}, now = d.now;
+  const fresh = a.ts && now - a.ts < 120;
+  $("dot").classList.toggle("on", !!fresh);
+  const live = a.mode === "live";
+  $("mode").textContent = live ? "LIVE" : "PAPER";
+  $("mode").classList.toggle("live", live);
+
+  const eq = d.equity.length ? d.equity.at(-1)[1] : (a.risk?.equity_sol ?? null);
+  if (eq != null) {
+    $("equity").innerHTML = eq.toFixed(4) + "<small>SOL</small>";
+    if (d.start_equity) {
+      const ch = eq - d.start_equity, pct = (ch / d.start_equity) * 100;
+      $("change").className = "change " + (ch >= 0 ? "pos" : "neg");
+      $("change").textContent = `${ch >= 0 ? "▲" : "▼"} ${fmt(ch)} SOL (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%) siden start`;
+    }
+  }
+  chart(d.equity);
+
+  const st = d.stats;
+  $("s-closed").textContent = st.closed;
+  $("s-wr").textContent = st.closed ? Math.round((st.wins / st.closed) * 100) + "%" : "–";
+  $("s-pnl").textContent = fmt(st.pnl_sol, 3);
+  $("s-pnl").className = st.pnl_sol >= 0 ? "pos" : "neg";
+
+  const w = $("warn");
+  if (!fresh) { w.style.display = "block"; w.textContent = a.ts ? `Botten har ikke meldt sig i ${ago(a.ts, now)}. Kører den?` : "Botten har ikke kørt endnu. Start den med: fomobot run"; }
+  else if (a.risk?.paused) { w.style.display = "block"; w.textContent = "⏸ Nye køb på pause: " + a.risk.paused; }
+  else w.style.display = "none";
+
+  const sc = a.scanner || {}, an = a.analyst || {}, ex = a.executor || {}, rk = a.risk || {}, f = an.funnel || {};
+  const ld = an.last_decision;
+  $("running").textContent = fresh ? "4 kører" : "stoppet";
+  $("agents").innerHTML = [
+    agentCard("Scanner", "📡", "rgba(34,197,94,.18)", sc.live_feed ? "lytter live" : "scanner", "pos",
+      [["Tokens", sc.tokens_seen ?? "–"], ["Graduations 24t", sc.graduations_24h ?? "–"], ["Watchlist", sc.watchlist ?? "–"]]),
+    agentCard("Analyst", "🧠", "rgba(139,92,246,.2)", an.claude ? "ML + Claude" : "ML-model", "mut",
+      [["Til modellen", (f.ml_model ?? 0) + (f.candidates ?? 0)], ["Kandidater", f.candidates ?? 0],
+       ["Seneste", ld ? `${ld.action} ${ld.symbol}` : "–"]]),
+    agentCard("Executor", "⚡", "rgba(59,130,246,.2)", ex.open_positions ? "har positioner" : "klar", "mut",
+      [["Åbne", ex.open_positions ?? 0], ["Handler 24t", ex.trades_24h ?? 0], ["Kontant", (ex.cash_sol ?? 0).toFixed(3)]]),
+    agentCard("Risk", "🛡️", "rgba(245,158,11,.2)", rk.paused ? "pause" : "vagt", rk.paused ? "neg" : "pos",
+      [["I spil", (rk.exposure_sol ?? 0).toFixed(3)], ["Maks pos.", rk.max_positions ?? "–"], ["Dagsgrænse", "-" + (rk.daily_loss_limit_pct ?? "–") + "%"]]),
+  ].join("");
+
+  $("positions").innerHTML = d.open_positions.length ? d.open_positions.map((p) => `
+    <a class="row" style="color:inherit;text-decoration:none" href="https://dexscreener.com/solana/${esc(p.mint)}" target="_blank">
+      <div class="av" style="background:${color(p.symbol)}">${esc(p.symbol).slice(0, 2)}</div>
+      <div class="mid"><div class="t">${esc(p.symbol)}</div><div class="s">${p.tp_hit ? "TP ramt · trailer resten" : "åben"} · ${ago(p.opened_at, now)}</div></div>
+      <div class="r">${p.cost_sol.toFixed(3)} SOL</div></a>`).join("") : `<div class="empty">Ingen åbne positioner</div>`;
+
+  const items = [
+    ...d.trades.map((t) => ({ts: t.ts, sym: t.symbol, title: (t.side === "BUY" ? "Købte " : "Solgte ") + t.symbol,
+      sub: (t.side === "BUY" ? "Executor" : "Risk") + " · " + (t.reason || "").slice(0, 60), right: (t.side === "BUY" ? "-" : "+") + t.sol_amount.toFixed(3),
+      cls: t.side === "BUY" ? "mut" : "pos"})),
+    ...d.decisions.filter((x) => x.action === "SKIP").slice(0, 8).map((x) => ({ts: x.ts, sym: x.symbol, title: "Sprang over " + x.symbol,
+      sub: "Analyst · " + (x.thesis || "").slice(0, 60), right: Math.round(x.conviction) + "", cls: "mut"})),
+  ].sort((p, q) => q.ts - p.ts).slice(0, 25);
+  $("activity").innerHTML = items.length ? items.map((i) => `
+    <div class="row"><div class="av" style="background:${color(i.sym)}">${esc(i.sym).slice(0, 2)}</div>
+      <div class="mid"><div class="t">${esc(i.title)}</div><div class="s">${esc(i.sub)} · ${clock(i.ts)}</div></div>
+      <div class="r ${i.cls}">${esc(i.right)}</div></div>`).join("") : `<div class="empty">Ingen aktivitet endnu. Botten handler kun de bedste ~10 %.</div>`;
+
+  $("foot").textContent = "Opdateret " + clock(now) + " · opdaterer hvert 5. sekund";
+}
+
+async function tick() {
+  try { const r = await fetch("/api/state", {cache: "no-store"}); if (r.ok) render(await r.json()); }
+  catch (e) { $("foot").textContent = "Kan ikke nå botten…"; }
+}
+tick(); setInterval(tick, 5000);
+</script>
+</body>
+</html>

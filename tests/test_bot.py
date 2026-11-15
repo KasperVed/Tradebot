@@ -399,3 +399,20 @@ def test_wallet_command_creates_key_once(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("WALLET_PRIVATE_KEY", key)
     wallet.wallet_command()
     assert (tmp_path / ".env").read_text().count("WALLET_PRIVATE_KEY=") == 1
+
+
+def test_dashboard_snapshot_after_trading(cfg):
+    from fomobot.dashboard import snapshot
+
+    store = Store(cfg.db_path)
+    dex = FakeDex()
+    cfg.strategy.rule_buy_threshold = 50
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None,
+                 ml=None, feed=None, quotes=None)
+    eng.tick()
+    eng.tick()
+    snap = snapshot(cfg.db_path)
+    assert snap["agents"]["mode"] == "paper"
+    assert snap["agents"]["scanner"]["tokens_seen"] >= 1
+    assert len(snap["equity"]) >= 2 and snap["start_equity"]
+    assert snap["open_positions"] and snap["trades"][0]["side"] == "BUY"

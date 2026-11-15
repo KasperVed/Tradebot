@@ -79,7 +79,9 @@ def cmd_report(store: Store) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="fomobot", description="Solana memecoin trading bot (FOMO wallet compatible)")
-    ap.add_argument("command", choices=["run", "scan", "status", "report", "wallet", "collect", "backtest"])
+    ap.add_argument("command", choices=["run", "scan", "status", "report", "wallet", "dashboard", "collect", "backtest"])
+    ap.add_argument("--dashboard", action="store_true", help="with run: also serve the phone dashboard")
+    ap.add_argument("--port", type=int, default=8080, help="dashboard port")
     ap.add_argument("--data", default="data/history", help="dataset dir for collect/backtest")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--live", action="store_true", help="trade real funds (also requires execution.mode: live)")
@@ -120,11 +122,19 @@ def main(argv: list[str] | None = None) -> None:
         return cmd_status(store)
     if args.command == "report":
         return cmd_report(store)
+    if args.command == "dashboard":
+        from .dashboard import serve
+
+        return serve(db, args.port)
 
     engine = build_engine(cfg, store, live=live, trade=args.command == "run")
     if args.command == "scan":
         engine.tick()
         return
+    if args.dashboard:
+        from .dashboard import serve
+
+        serve(db, args.port, background=True)
     try:
         engine.run()
     except KeyboardInterrupt:

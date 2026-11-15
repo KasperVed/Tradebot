@@ -229,6 +229,7 @@ class Engine:
             signals.append(sig)
         self.store.set_state("watchlist", watch)
         funnel["candidates"] = len(signals)
+        self.last_funnel = dict(funnel)
         log.info("funnel: %s seen -> rejected market %s, rugcheck %s, entry gate %s, ml model %s -> %s candidates",
                  *funnel.values())
         # The ML probability is the validated ranking; the rule score is a tie-breaker.
@@ -314,6 +315,8 @@ class Engine:
         pf = self.portfolio(positions, snaps)
         paused = self.risk.trading_paused(pf["equity_sol"]) if self.trade else None
         self._daily_summary(pf, len(positions))
+        self.store.add_equity(pf["equity_sol"])
+        self._publish_agents(pf, positions, len(snaps), paused)
         if paused:
             log.warning("Entries paused: %s", paused)
             if paused != self._last_pause_msg:
@@ -325,6 +328,27 @@ class Engine:
         log.info("tick: %d tokens seen, %d candidates, equity %.4f SOL (%d open)",
                  len(snaps), len(signals), pf["equity_sol"], len(positions))
         self.decide_and_enter(signals, positions, snaps)
+
+    def _publish_agents(self, pf: dict, positions: list[Position], seen: int, paused: str | None) -> None:
+        """Snapshot of what each agent is doing, for the dashboard."""
+        grads = self.store.get_state("graduated", {}) or {}
+        last = self.store.db.execute("SELECT symbol, action, conviction, source, ts FROM decisions "
+                                     "ORDER BY ts DESC LIMIT 1").fetchone()
+        day = time.time() - 24 * 3600
+        trades_24h = self.store.db.execute("SELECT COUNT(*) FROM trades WHERE ts >= ?", (day,)).fetchone()[0]
+        self.store.set_state("agents", {
+            "ts": time.time(),
+            "mode": self.ex.mode,
+            "scanner": {"tokens_seen": seen, "graduations_24h": len(grads),
+                        "live_feed": bool(self.feed and getattr(self.feed, "connected", False)),
+                        "watchlist": len(self.store.get_state("watchlist", {}) or {})},
+            "analyst": {"funnel": getattr(self, "last_funnel", {}), "ml": bool(self.ml), "claude": bool(self.analyst),
+                        "last_decision": dict(last) if last else None},
+            "executor": {"open_positions": len(positions), "trades_24h": trades_24h, "cash_sol": pf["cash_sol"]},
+            "risk": {"paused": paused, "equity_sol": pf["equity_sol"], "exposure_sol": pf["exposure_sol"],
+                     "max_positions": self.cfg.risk.max_open_positions,
+                     "daily_loss_limit_pct": self.cfg.risk.daily_loss_limit_pct},
+        })
 
     def _daily_summary(self, pf: dict, open_positions: int) -> None:
         from datetime import datetime, timezone

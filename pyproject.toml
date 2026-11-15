@@ -30,4 +30,5 @@ build-backend = "setuptools.build_meta"
 include = ["fomobot*"]
 
 [tool.setuptools.package-data]
+"fomobot" = ["dashboard.html"]
 "fomobot.intelligence" = ["memecoin_model.joblib", "memecoin_model.json"]

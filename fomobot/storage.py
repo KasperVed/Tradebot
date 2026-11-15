@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS prices (mint TEXT, ts REAL, price_sol REAL, liquidity
 CREATE INDEX IF NOT EXISTS prices_mint_ts ON prices(mint, ts);
 CREATE TABLE IF NOT EXISTS lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, position_id INTEGER, lesson TEXT);
 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS equity (ts REAL, equity_sol REAL);
 """
 
 POS_COLS = [
@@ -68,6 +69,10 @@ class Store:
             "SELECT liquidity_usd FROM prices WHERE mint=? AND ts>=? ORDER BY ts ASC LIMIT 1", (mint, since)
         ).fetchone()
         return row["liquidity_usd"] if row else None
+
+    def add_equity(self, equity_sol: float) -> None:
+        self.db.execute("INSERT INTO equity VALUES (?, ?)", (time.time(), equity_sol))
+        self.db.commit()
 
     def prune_prices(self, older_than_s: float = 48 * 3600) -> None:
         self.db.execute("DELETE FROM prices WHERE ts < ?", (time.time() - older_than_s,))
