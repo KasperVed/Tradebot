@@ -127,7 +127,7 @@ def test_risk_sizing_and_limits(cfg, tmp_path):
 def test_full_paper_cycle_buy_take_profit_trail_close(cfg):
     store = Store(cfg.db_path)
     dex = FakeDex()
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None, feed=None, quotes=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None, feed=None, quotes=None, prices=None)
     cfg.strategy.rule_buy_threshold = 50
 
     eng.tick()
@@ -155,7 +155,7 @@ def test_stop_loss(cfg):
     store = Store(cfg.db_path)
     dex = FakeDex()
     cfg.strategy.rule_buy_threshold = 50
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None, feed=None, quotes=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None, ml=None, feed=None, quotes=None, prices=None)
     eng.tick()
     entry = store.open_positions()[0].entry_price
     dex.pairs = [make_pair(price=entry * 0.7)]
@@ -168,7 +168,7 @@ def test_rugged_token_never_bought(cfg):
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 0
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(),
-                 rug=FakeRug(dict(CLEAN_RUG, freezeAuthority="X")), analyst=None, ml=None, feed=None, quotes=None)
+                 rug=FakeRug(dict(CLEAN_RUG, freezeAuthority="X")), analyst=None, ml=None, feed=None, quotes=None, prices=None)
     eng.tick()
     assert store.open_positions() == []
 
@@ -241,7 +241,7 @@ def test_ml_gate_blocks_low_probability(cfg):
 
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 0
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=LowModel(), feed=None, quotes=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=LowModel(), feed=None, quotes=None, prices=None)
     eng.tick()
     assert store.open_positions() == []
 
@@ -256,7 +256,7 @@ def test_ml_rejects_tokens_outside_training_domain(cfg):
 
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 0
-    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=HighModel(), feed=None, quotes=None)
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None, ml=HighModel(), feed=None, quotes=None, prices=None)
     eng.tick()  # FakeDex pair is 3h old, far outside the 30-minute training window
     assert store.open_positions() == []
     cfg.ml.max_age_minutes = 1e9
@@ -288,7 +288,7 @@ def test_roundtrip_check_blocks_honeypot(cfg):
     store = Store(cfg.db_path)
     cfg.strategy.rule_buy_threshold = 50
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None,
-                 ml=None, feed=None, quotes=Honeypot())
+                 ml=None, feed=None, quotes=Honeypot(), prices=None)
     eng.tick()
     assert store.open_positions() == []
     store.db.execute("DELETE FROM decisions"); store.commit()
@@ -304,7 +304,7 @@ def test_feed_mints_enter_watchlist(cfg):
 
     store = Store(cfg.db_path)
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None,
-                 ml=None, feed=Feed(), quotes=None)
+                 ml=None, feed=Feed(), quotes=None, prices=None)
     eng.discover([])
     assert "NEWMINT111" in store.get_state("watchlist")
 
@@ -378,7 +378,7 @@ def test_telegram_notifications_on_buy_and_close(cfg):
     dex = FakeDex()
     cfg.strategy.rule_buy_threshold = 50
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None,
-                 ml=None, feed=None, quotes=None, notifier=n)
+                 ml=None, feed=None, quotes=None, notifier=n, prices=None)
     eng.tick()
     entry = store.open_positions()[0].entry_price
     dex.pairs = [make_pair(price=entry * 0.6)]
@@ -414,7 +414,7 @@ def test_dashboard_snapshot_after_trading(cfg):
     dex = FakeDex()
     cfg.strategy.rule_buy_threshold = 50
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None,
-                 ml=None, feed=None, quotes=None)
+                 ml=None, feed=None, quotes=None, prices=None)
     eng.tick()
     eng.tick()
     snap = snapshot(cfg.db_path)
@@ -430,7 +430,7 @@ def test_take_profit_ladder_sells_in_steps(cfg):
     cfg.strategy.rule_buy_threshold = 50
     cfg.strategy.trailing_stop_pct = 90  # isolate the ladder
     eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None,
-                 ml=None, feed=None, quotes=None)
+                 ml=None, feed=None, quotes=None, prices=None)
     eng.tick()
     pos = store.open_positions()[0]
     entry, start = pos.entry_price, pos.token_amount
@@ -457,3 +457,47 @@ def test_old_database_is_upgraded(tmp_path):
     db.commit()
     db.close()
     assert Store(str(path)).open_positions() == []
+
+
+def test_fast_exit_fires_between_scans(cfg):
+    class FastPrices:
+        price = None
+
+        def prices(self, mints):
+            return {m: (self.price, None) for m in mints} if self.price else {}
+
+    fp = FastPrices()
+    store = Store(cfg.db_path)
+    cfg.strategy.rule_buy_threshold = 50
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None,
+                 ml=None, feed=None, quotes=None, prices=fp)
+    eng.tick()
+    entry = store.open_positions()[0].entry_price
+    fp.price = entry * 0.6  # crash between scans: the market scan hasn't seen it yet
+    eng.fast_exits()
+    closed = store.closed_positions()
+    assert closed and "stop loss" in closed[0]["exit_reason"]
+
+
+def test_ml_confidence_tier_sizes_positions(cfg):
+    class Model:
+        def __init__(self, p):
+            self.p = p
+
+        def predict(self, snap, rug):
+            return self.p
+
+        def threshold(self, q):
+            return {0.9: 0.3, 0.95: 0.5}.get(q, 0.3)
+
+    sizes = {}
+    for label, p in (("low", 0.35), ("top", 0.6)):
+        c = cfg.model_copy(deep=True)
+        c.db_path = cfg.db_path.replace(".db", f"-{label}.db")
+        c.ml.max_age_minutes = 1e9
+        store = Store(c.db_path)
+        eng = Engine(c, store, PaperExecutor(c.execution, store), dex=FakeDex(), rug=FakeRug(), analyst=None,
+                     ml=Model(p), feed=None, quotes=None, prices=None)
+        eng.tick()
+        sizes[label] = store.open_positions()[0].cost_sol
+    assert sizes["top"] == pytest.approx(sizes["low"] * 1.25 / 0.75, rel=0.01)

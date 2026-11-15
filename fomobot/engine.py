@@ -34,6 +34,7 @@ class Engine:
         feed="auto",
         quotes="auto",
         notifier=None,
+        prices="auto",
     ):
         self.cfg, self.store, self.ex = cfg, store, executor
         self.dex = dex or DexScreener()
@@ -62,6 +63,13 @@ class Engine:
             ml = TradeModel.load(cfg.ml.model_path) if cfg.ml.enabled else None
         self.ml = ml
         self.ml_threshold = self.ml.threshold(cfg.ml.min_percentile) if self.ml else None
+        self.ml_top_tier = self.ml.threshold(cfg.ml.top_tier_percentile) if self.ml else None
+        self.prices = prices
+        if self.prices == "auto":
+            from .data.jupiter_prices import JupiterPrices
+
+            self.prices = JupiterPrices() if cfg.strategy.fast_exit_seconds > 0 else None
+        self._last_snaps: dict[str, TokenSnapshot] = {}
         self.risk = RiskManager(cfg.risk, cfg.strategy, store)
         self.trade = trade  # False = analyse only ("scan")
         from .notify import Notifier
@@ -265,6 +273,9 @@ class Engine:
             if decision.action != Action.BUY or not self.trade:
                 continue
             decision.size_multiplier *= sig.safety.size_factor
+            if sig.ml_prob is not None and self.ml_top_tier is not None:
+                top = sig.ml_prob >= self.ml_top_tier
+                decision.size_multiplier *= self.cfg.ml.top_tier_size if top else self.cfg.ml.lower_tier_size
             check = self.risk.check_entry(
                 decision, snap.mint, pf["equity_sol"], pf["cash_sol"], positions, pf["exposure_sol"]
             )
@@ -307,6 +318,8 @@ class Engine:
     def tick(self) -> None:
         positions = self.store.open_positions()
         snaps = self.discover(positions)
+        self._last_snaps.update(snaps)  # base snapshots for fast exits between scans
+        self._last_snaps = {m: s for m, s in self._last_snaps.items() if time.time() - s.fetched_at < 3600}
         for s in snaps.values():
             self.store.add_price(s.mint, s.price_sol, s.liquidity_usd, s.fetched_at)
         self.store.commit()
@@ -368,6 +381,28 @@ class Engine:
         wins = sum(1 for r in closed if (r["pnl_sol"] or 0) > 0)
         self.notify.summary(pf["equity_sol"], start or pf["equity_sol"], len(closed), wins, open_positions)
 
+    def fast_exits(self) -> None:
+        """Re-price open positions between scans and run the exit rules immediately."""
+        import dataclasses
+
+        if not (self.prices and self.trade):
+            return
+        positions = self.store.open_positions()
+        if not positions:
+            return
+        quotes = self.prices.prices([p.mint for p in positions])
+        snaps = {}
+        for p in positions:
+            base, q = self._last_snaps.get(p.mint), quotes.get(p.mint)
+            if not (base and q):
+                continue
+            price, _liq = q
+            # Keep DexScreener's liquidity: Jupiter measures it differently, and mixing the two
+            # could fake a "liquidity collapse". Liquidity exits stay on the 30 s scan.
+            snaps[p.mint] = dataclasses.replace(base, price_sol=price, fetched_at=time.time())
+        if snaps:
+            self.manage_positions([p for p in positions if p.mint in snaps], snaps)
+
     def run(self) -> None:
         log.info("FOMO bot running in %s mode", self.ex.mode.upper())
         self.notify.send(f"🤖 Botten er startet ({self.ex.mode})")
@@ -383,4 +418,11 @@ class Engine:
             n += 1
             if n % 100 == 0:
                 self.store.prune_prices()
-            time.sleep(max(1.0, self.cfg.tick_seconds - (time.time() - start)))
+            fast = self.cfg.strategy.fast_exit_seconds
+            while time.time() - start < self.cfg.tick_seconds:
+                time.sleep(fast if fast > 0 else max(1.0, self.cfg.tick_seconds - (time.time() - start)))
+                if fast > 0:
+                    try:
+                        self.fast_exits()
+                    except Exception:
+                        log.exception("fast exit check failed")

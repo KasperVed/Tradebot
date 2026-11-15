@@ -231,8 +231,8 @@ def rule_decision(sig: Signal, threshold: float, tp: float, sl: float) -> Decisi
     if sig.ml_prob is not None:  # ML gate already applied upstream; conviction from its probability
         return Decision(
             action=Action.BUY if sig.safety.passed else Action.SKIP,
-            conviction=_clamp(50 + (sig.ml_prob - (sig.ml_threshold or 0.4)) * 150, 50, 95),
-            size_multiplier=0.75, take_profit_pct=tp, stop_loss_pct=sl,
+            conviction=75,  # neutral; the engine sizes by the model's confidence tier
+            size_multiplier=1.0, take_profit_pct=tp, stop_loss_pct=sl,
             thesis=f"ML p(profit)={sig.ml_prob:.2f}; " + ("; ".join(sig.reasons) or "rule score"),
             risks=sig.safety.flags, source="rules+ml",
         )

@@ -79,6 +79,9 @@ class StrategyConfig(BaseModel):
     exit_on_liquidity_drop_pct: float = 50
     reentry_cooldown_minutes: float = 120
     breakeven_after_tp: bool = True
+    # Between market scans, re-price open positions this often (Jupiter price API) so stops,
+    # take-profits and liquidity exits fire within seconds. 0 = only on the 30 s scan.
+    fast_exit_seconds: float = 2.0
     entry_gate: EntryGateConfig = Field(default_factory=EntryGateConfig)
 
 
@@ -103,6 +106,11 @@ class MLConfig(BaseModel):
     # The model was trained on tokens 1-25 minutes after pool launch. Outside that window it
     # extrapolates, and the out-of-sample edge was gone for tokens older than ~10-30 min.
     max_age_minutes: float = 30
+    # Size by model confidence: in the out-of-sample test the top 5% of scores made +37%/trade
+    # vs +19% for the 90-95% band (research/README.md), so the top band gets bigger positions.
+    top_tier_percentile: float = 0.95
+    top_tier_size: float = 1.25
+    lower_tier_size: float = 0.75
     reject_out_of_domain: bool = True
     model_path: str | None = None  # default: bundled fomobot/intelligence/memecoin_model.joblib
 
