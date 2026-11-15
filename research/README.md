@@ -48,12 +48,24 @@ udvalgte handler i test-ugen:
 Kravet om låst LP fjernede netop de bedste handler. LP-lås er derfor et soft flag med halv positionsstørrelse, ikke en
 afvisning. Rugs er med i resultaterne, fordi et likviditetstræk ses som et kursfald i candles.
 
+**6. Salg i trin giver flere vindere.** `exit_ladders.py` tester salgsstiger på de samme handler (test-ugen, n=48):
+
+| Salgsstige | Gns. pr. handel | Vindere | Profit factor |
+|---|---|---|---|
+| 50 % ved +100 %, trail 35 % | +25,9 % | 58 % | 3,67 |
+| **25 % ved +50 / +100 / +200 %, trail 35 %** | +24,8 % | **67 %** | **4,35** |
+| 25 % ved +100 / +300 %, lang trail | +28,1 % | 58 % | 3,86 |
+| 50 % ved +50 %, trail 25 % | +23,8 % | 67 % | 4,22 |
+
+Forskellen i gennemsnit ligger inden for støj ved 48 handler. Stigen i 3 trin vinder oftere og har den bedste profit
+factor, så den er standard.
+
 ## Hvad botten gør med det
 
 - ML-modellen (`fomobot/intelligence/memecoin_model.joblib`) er porten: kun tokens i modellens top 10 % går videre
   til Claude.
 - Kun tokens på 2-30 minutter, altså modellens træningsdomæne. Ældre tokens afvises, fordi modellen dér kun gætter.
-- Standard-exits: SL 25 %, sælg 50 % ved +100 %, trailing stop 35 %, max 4 timer.
+- Standard-exits: SL 25 %, sælg 25 % ved +50/+100/+200 %, trailing stop 35 % på resten, max 4 timer.
 - Filtrene fra tabellen ovenfor. Ulåst LP giver halv størrelse.
 
 ## Undersøgt, men ikke brugt (endnu)
@@ -83,5 +95,6 @@ Derfor: kør botten i paper mode og sammenlign dens faktiske resultater med tabe
 python research/memecoin_dataset.py --data ian-data     # analyse
 python research/train_model.py --data ian-data          # træn og gem modellen
 python research/filter_check.py --data ian-data         # hvilke sikkerhedsfiltre hjælper
+python research/exit_ladders.py --data ian-data         # hvilken salgsstige virker bedst
 python -m fomobot collect && python -m fomobot backtest # candle-backtest på GeckoTerminal-data
 ```

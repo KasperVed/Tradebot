@@ -148,6 +148,7 @@ class Engine:
                 self._close(pos, order.reason)
             else:
                 pos.tp_hit = True
+                pos.tp_steps += 1
                 self.store.update_position(pos)
 
     def _close(self, pos: Position, reason: str) -> None:
@@ -288,6 +289,7 @@ class Engine:
                 token_amount=fill.token_amount, token_raw=fill.token_raw, cost_sol=fill.sol_amount,
                 opened_at=time.time(), stop_loss_pct=decision.stop_loss_pct,
                 take_profit_pct=decision.take_profit_pct, peak_price=fill.price_sol, thesis=decision.thesis,
+                initial_tokens=fill.token_amount,
             )
             self.store.insert_position(pos)
             self.store.record_trade(

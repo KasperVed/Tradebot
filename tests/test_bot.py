@@ -422,3 +422,38 @@ def test_dashboard_snapshot_after_trading(cfg):
     assert snap["agents"]["scanner"]["tokens_seen"] >= 1
     assert len(snap["equity"]) >= 2 and snap["start_equity"]
     assert snap["open_positions"] and snap["trades"][0]["side"] == "BUY"
+
+
+def test_take_profit_ladder_sells_in_steps(cfg):
+    store = Store(cfg.db_path)
+    dex = FakeDex()
+    cfg.strategy.rule_buy_threshold = 50
+    cfg.strategy.trailing_stop_pct = 90  # isolate the ladder
+    eng = Engine(cfg, store, PaperExecutor(cfg.execution, store), dex=dex, rug=FakeRug(), analyst=None,
+                 ml=None, feed=None, quotes=None)
+    eng.tick()
+    pos = store.open_positions()[0]
+    entry, start = pos.entry_price, pos.token_amount
+    for mult, steps, left in ((1.6, 1, 0.75), (2.1, 2, 0.50), (3.1, 3, 0.25)):
+        dex.pairs = [make_pair(price=entry * mult)]
+        eng.tick()
+        pos = store.open_positions()[0]
+        assert pos.tp_steps == steps
+        assert pos.token_amount == pytest.approx(start * left)
+    sells = [t for t in store.trades_for(pos.id) if t["side"] == "SELL"]
+    assert len(sells) == 3
+
+
+def test_old_database_is_upgraded(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE positions (id INTEGER PRIMARY KEY AUTOINCREMENT, mint TEXT NOT NULL, symbol TEXT, "
+               "entry_price REAL, token_amount REAL, token_raw INTEGER, cost_sol REAL, opened_at REAL, "
+               "stop_loss_pct REAL, take_profit_pct REAL, peak_price REAL, tp_hit INTEGER DEFAULT 0, "
+               "realized_sol REAL DEFAULT 0, thesis TEXT, status TEXT DEFAULT 'open', closed_at REAL, "
+               "pnl_sol REAL, exit_reason TEXT)")
+    db.commit()
+    db.close()
+    assert Store(str(path)).open_positions() == []

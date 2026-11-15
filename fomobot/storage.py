@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS positions (
     mint TEXT NOT NULL, symbol TEXT, entry_price REAL, token_amount REAL, token_raw INTEGER,
     cost_sol REAL, opened_at REAL, stop_loss_pct REAL, take_profit_pct REAL, peak_price REAL,
     tp_hit INTEGER DEFAULT 0, realized_sol REAL DEFAULT 0, thesis TEXT, status TEXT DEFAULT 'open',
+    tp_steps INTEGER DEFAULT 0, initial_tokens REAL DEFAULT 0,
     closed_at REAL, pnl_sol REAL, exit_reason TEXT
 );
 CREATE TABLE IF NOT EXISTS trades (
@@ -33,7 +34,7 @@ CREATE TABLE IF NOT EXISTS equity (ts REAL, equity_sol REAL);
 
 POS_COLS = [
     "id", "mint", "symbol", "entry_price", "token_amount", "token_raw", "cost_sol", "opened_at",
-    "stop_loss_pct", "take_profit_pct", "peak_price", "tp_hit", "realized_sol", "thesis", "status",
+    "stop_loss_pct", "take_profit_pct", "peak_price", "tp_hit", "realized_sol", "thesis", "status", "tp_steps", "initial_tokens",
 ]
 
 
@@ -42,6 +43,10 @@ class Store:
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(positions)")}
+        for col, ddl in (("tp_steps", "INTEGER DEFAULT 0"), ("initial_tokens", "REAL DEFAULT 0")):
+            if col not in cols:  # upgrade databases created by older versions
+                self.db.execute(f"ALTER TABLE positions ADD COLUMN {col} {ddl}")
         self.db.commit()
 
     # --- state ---------------------------------------------------------------

@@ -99,7 +99,14 @@ class RiskManager:
         if entry_liq and snap.liquidity_usd < entry_liq * (1 - self.strat.exit_on_liquidity_drop_pct / 100):
             return ExitOrder(1.0, f"liquidity collapsed (${entry_liq:,.0f} -> ${snap.liquidity_usd:,.0f})")
 
-        if not pos.tp_hit and change >= pos.take_profit_pct:
+        ladder = self.strat.take_profit_ladder
+        if ladder:
+            if pos.tp_steps < len(ladder) and change >= ladder[pos.tp_steps][0]:
+                gain, share = ladder[pos.tp_steps]
+                held = pos.token_amount / pos.initial_tokens if pos.initial_tokens else 1.0
+                fraction = min(1.0, share / held) if held > 0 else 1.0
+                return ExitOrder(fraction, f"take profit {pos.tp_steps + 1}/{len(ladder)} (+{change:.0f}%)")
+        elif not pos.tp_hit and change >= pos.take_profit_pct:
             return ExitOrder(self.strat.tp_sell_fraction, f"take profit +{change:.1f}%")
 
         if pos.tp_hit:

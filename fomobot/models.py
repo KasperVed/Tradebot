@@ -133,3 +133,5 @@ class Position:
     realized_sol: float = 0.0
     thesis: str = ""
     status: str = "open"
+    tp_steps: int = 0  # take-profit ladder steps already sold
+    initial_tokens: float = 0.0

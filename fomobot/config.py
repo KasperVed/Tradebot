@@ -69,7 +69,11 @@ class StrategyConfig(BaseModel):
     llm_min_conviction: float = 65
     default_take_profit_pct: float = 100
     default_stop_loss_pct: float = 25
-    tp_sell_fraction: float = 0.5  # sell this share at take-profit, trail the rest
+    tp_sell_fraction: float = 0.5  # single take-profit mode only (when the ladder is empty)
+    # Sell in steps: (gain %, share of the ORIGINAL position). The rest trails. Tested in
+    # research/exit_ladders.py: same average as one big take-profit, but 67% winning trades
+    # instead of 58% and the best profit factor (4.35). Empty list = single take-profit.
+    take_profit_ladder: list[tuple[float, float]] = Field(default_factory=lambda: [(50, 0.25), (100, 0.25), (200, 0.25)])
     trailing_stop_pct: float = 35
     max_hold_minutes: float = 240
     exit_on_liquidity_drop_pct: float = 50

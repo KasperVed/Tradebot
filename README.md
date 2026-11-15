@@ -47,8 +47,10 @@ Hver 30. sekund kører den denne pipeline:
 7. **Risikostyring.** Positionsstørrelse skaleres efter conviction. Der er loft over antal positioner, samlet
    eksponering og SOL pr. handel, og der holdes en SOL-reserve til fees. En **daglig tabsgrænse** og en **pause efter
    flere tab i træk** stopper nye køb.
-8. **Exits (valideret).** Stop-loss 25 %, salg af 50 % ved +100 %, trailing stop 35 % på resten, aldrig under
-   entry efter take-profit, exit hvis likviditeten kollapser, og max 4 timer.
+8. **Exits (valideret).** Sælger i trin: 25 % ved +50 %, 25 % ved +100 % og 25 % ved +200 %. Resten følger en
+   trailing stop på 35 %. Stop-loss er 25 %, botten sælger aldrig under entry efter første trin, går ud hvis
+   likviditeten kollapser, og holder højst 4 timer. Testet mod én stor take-profit: samme snit, men 67 % vindende
+   handler i stedet for 58 %.
 9. **Læring.** Når en handel lukkes, skriver Claude en kort lektion. Lektionen gemmes og bruges i fremtidige
    beslutninger.
 
