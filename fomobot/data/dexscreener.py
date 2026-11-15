@@ -27,20 +27,32 @@ def _i(v) -> int:
         return 0
 
 
-def pair_to_snapshot(pair: dict) -> TokenSnapshot | None:
-    """Convert a DexScreener pair to a snapshot. Only SOL-quoted Solana pairs are used,
-    so prices are directly in SOL."""
+def sol_usd_from(pairs: list[dict]) -> float | None:
+    """SOL's USD price implied by SOL-quoted pairs in the same response (median, no extra call)."""
+    vals = sorted(_f(p.get("priceUsd")) / _f(p.get("priceNative")) for p in pairs
+                  if (p.get("quoteToken") or {}).get("address") == WSOL_MINT
+                  and _f(p.get("priceUsd")) > 0 and _f(p.get("priceNative")) > 0)
+    return vals[len(vals) // 2] if vals else None
+
+
+def pair_to_snapshot(pair: dict, sol_usd: float | None = None) -> TokenSnapshot | None:
+    """Convert a DexScreener pair to a snapshot priced in SOL. SOL-quoted pairs use the native
+    price directly; pairs quoted in another token (pump.fun now allows e.g. coin/ANTHROPIC curves)
+    are converted through USD when SOL's USD price is known and the pool has real liquidity."""
     if pair.get("chainId") != "solana":
         return None
     base = pair.get("baseToken") or {}
     quote = pair.get("quoteToken") or {}
-    if quote.get("address") != WSOL_MINT or not base.get("address"):
+    if not base.get("address"):
+        return None
+    sol_quoted = quote.get("address") == WSOL_MINT
+    if not sol_quoted and (not sol_usd or _f((pair.get("liquidity") or {}).get("usd")) <= 0):
         return None
     txns = pair.get("txns") or {}
     vol = pair.get("volume") or {}
     chg = pair.get("priceChange") or {}
     info = pair.get("info") or {}
-    price_sol = _f(pair.get("priceNative"))
+    price_sol = _f(pair.get("priceNative")) if sol_quoted else _f(pair.get("priceUsd")) / sol_usd
     if price_sol <= 0:
         return None
     return TokenSnapshot(
@@ -77,13 +89,19 @@ def pair_to_snapshot(pair: dict) -> TokenSnapshot | None:
 
 
 def best_snapshots(pairs: list[dict]) -> dict[str, TokenSnapshot]:
-    """Pick the most liquid SOL pair per token."""
-    best: dict[str, TokenSnapshot] = {}
+    """Pick the most liquid pair per token, preferring SOL-quoted pairs; a token that only
+    trades against other tokens falls back to its most liquid non-SOL pair."""
+    sol_usd = sol_usd_from(pairs)
+    best: dict[str, tuple[bool, TokenSnapshot]] = {}
     for pair in pairs:
-        snap = pair_to_snapshot(pair)
-        if snap and (snap.mint not in best or snap.liquidity_usd > best[snap.mint].liquidity_usd):
-            best[snap.mint] = snap
-    return best
+        snap = pair_to_snapshot(pair, sol_usd)
+        if not snap:
+            continue
+        sol_quoted = (pair.get("quoteToken") or {}).get("address") == WSOL_MINT
+        cur = best.get(snap.mint)
+        if cur is None or (sol_quoted, snap.liquidity_usd) > (cur[0], cur[1].liquidity_usd):
+            best[snap.mint] = (sol_quoted, snap)
+    return {m: s for m, (_, s) in best.items()}
 
 
 class DexScreener:

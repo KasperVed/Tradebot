@@ -17,7 +17,7 @@ in its top 10% and that pass tested safety filters; sell in steps; stop out fast
 
 ```bash
 pip install -e .            # installs the `fomobot` command
-python -m pytest            # 32 tests, all must pass; also run `python -m pyflakes fomobot tests`
+python -m pytest            # 33 tests, all must pass; also run `python -m pyflakes fomobot tests`
 fomobot wallet              # create the bot's own Solana wallet (key -> .env, never printed)
 fomobot scan                # one analysis pass, no trading
 fomobot run --dashboard     # paper trading + phone dashboard on http://<lan-ip>:8080
@@ -86,7 +86,9 @@ no evidence of profit), first-block sniping (cost + competition, -11% base rate)
 
 ## Known API facts (verified live, Nov 2026)
 
-- DexScreener: free; only SOL-quoted pairs used; pump.fun bonding-curve pairs show liquidity $0.
+- DexScreener: free; pump.fun bonding-curve pairs show liquidity $0. SOL-quoted pairs are preferred;
+  since pump.fun allows curves quoted in other tokens (e.g. BUTTHOLE/ANTHROPIC), a token with only
+  non-SOL pools is priced via USD (SOL/USD implied from SOL pairs in the same response).
 - RugCheck `/v1/tokens/{mint}/report`: AMM/pool accounts appear in `topHolders` (exclude via
   `knownAccounts` type AMM); fresh PumpSwap pools report LP ~0% locked until re-indexed.
 - PumpPortal: `subscribeMigration` / `subscribeNewToken` free; `subscribeTokenTrade` needs an API key

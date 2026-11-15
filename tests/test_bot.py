@@ -85,7 +85,19 @@ def test_pair_parsing_requires_sol_quote():
     assert pair_to_snapshot(make_pair()).price_sol == pytest.approx(0.0001)
     p = make_pair()
     p["quoteToken"]["address"] = "USDC"
-    assert pair_to_snapshot(p) is None
+    assert pair_to_snapshot(p) is None  # non-SOL quote needs a SOL/USD price to convert
+
+
+def test_tokens_quoted_in_other_tokens_are_seen():
+    sol_pair = make_pair(price=0.0001, mint="OTHER111")  # implies SOL = $150 (priceUsd = native * 150)
+    alt = make_pair(price=0.5, liq=40_000, mint=MINT)
+    alt["quoteToken"] = {"address": "ANTHROPICmint", "symbol": "ANTHROPIC"}
+    alt["priceUsd"] = "0.003"  # $0.003 / $150 = 0.00002 SOL
+    snaps = best_snapshots([sol_pair, alt])
+    assert snaps[MINT].price_sol == pytest.approx(0.00002)
+    # a SOL pair for the same token is preferred over a more liquid non-SOL pair
+    own_sol = make_pair(price=0.000021, liq=20_000, mint=MINT)
+    assert best_snapshots([sol_pair, alt, own_sol])[MINT].price_sol == pytest.approx(0.000021)
 
 
 def test_safety_rejects_mint_authority_and_whales(cfg):
