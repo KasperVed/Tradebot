@@ -290,8 +290,8 @@ class Engine:
             rt_loss = None
             if self.quotes:
                 rt = self.quotes.round_trip(snap.mint, check.size_sol)
-                if not rt.ok or rt.loss_pct > self.cfg.execution.max_roundtrip_loss_pct:
-                    why = rt.reason or f"round trip would lose {rt.loss_pct:.1f}%"
+                if not rt.ok:
+                    why = rt.reason or (f"round trip would lose {rt.loss_pct:.1f}%" if rt.loss_pct else "honeypot check failed")
                     log.info("  not entering %s: %s", snap.symbol, why)
                     continue
                 rt_loss = rt.loss_pct
