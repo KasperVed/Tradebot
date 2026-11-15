@@ -382,3 +382,20 @@ def test_telegram_notifications_on_buy_and_close(cfg):
     assert any("Status" in t for t in sent)
     assert all(t.startswith("📝 PAPER") for t in sent)
     assert not Notifier(token="", chat_id="").enabled
+
+
+def test_wallet_command_creates_key_once(tmp_path, monkeypatch, capsys):
+    from fomobot import wallet
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WALLET_PRIVATE_KEY", raising=False)
+    monkeypatch.setattr(wallet, "ENV", tmp_path / ".env")
+    monkeypatch.setattr(wallet, "balance_sol", lambda a, r: 0.0)
+    wallet.wallet_command()
+    env = (tmp_path / ".env").read_text()
+    key = env.split("WALLET_PRIVATE_KEY=")[1].strip()
+    out = capsys.readouterr().out
+    assert key and key not in out  # private key never printed
+    monkeypatch.setenv("WALLET_PRIVATE_KEY", key)
+    wallet.wallet_command()
+    assert (tmp_path / ".env").read_text().count("WALLET_PRIVATE_KEY=") == 1

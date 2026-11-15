@@ -79,7 +79,7 @@ def cmd_report(store: Store) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="fomobot", description="Solana memecoin trading bot (FOMO wallet compatible)")
-    ap.add_argument("command", choices=["run", "scan", "status", "report", "collect", "backtest"])
+    ap.add_argument("command", choices=["run", "scan", "status", "report", "wallet", "collect", "backtest"])
     ap.add_argument("--data", default="data/history", help="dataset dir for collect/backtest")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--live", action="store_true", help="trade real funds (also requires execution.mode: live)")
@@ -94,6 +94,10 @@ def main(argv: list[str] | None = None) -> None:
     for noisy in ("httpx", "httpx2", "anthropic"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
+    if args.command == "wallet":
+        from .wallet import wallet_command
+
+        return wallet_command()
     if args.command == "collect":
         from .backtest.dataset import collect
 

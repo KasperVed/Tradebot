@@ -102,10 +102,11 @@ får dens rent (~0,002 SOL) tilbage.
 Sådan kommer pengene fra Coinbase til botten (det gør kontoens ejer selv):
 
 1. Kør paper mode i 3-7 dage og tjek `fomobot report`. Hvis resultatet ligger langt under researchen, så stop her.
-2. Opret en **ny** Solana-wallet, der kun bruges til botten (fx i Phantom). Brug aldrig en wallet med andre penge i.
-3. Køb SOL på Coinbase og send dem til den nye wallets adresse. Start med en lille del, fx 0,5 SOL.
-4. Eksportér den nye wallets private key og læg den i `.env` som `WALLET_PRIVATE_KEY`. Sæt `SOLANA_RPC_URL` til en
-   rigtig RPC (fx en gratis Helius-nøgle).
+2. Kør `fomobot wallet`. Den laver bottens egen Solana-wallet (ingen Phantom nødvendig), gemmer nøglen i `.env` og
+   viser adressen.
+3. Køb SOL på Coinbase og send dem til den adresse (vælg Solana-netværket). Start småt, fx 0,3-0,5 SOL.
+4. Sæt `SOLANA_RPC_URL` i `.env` til en rigtig RPC (fx en gratis Helius-nøgle). Tag en backup af `.env`, for uden
+   nøglen er pengene væk.
 5. Sæt `execution.mode: live` i `config.yaml` og start med `fomobot run --live`.
 
 ## Gå live (rigtige penge)
